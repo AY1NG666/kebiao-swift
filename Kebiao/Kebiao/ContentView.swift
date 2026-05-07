@@ -24,7 +24,7 @@ struct DayLabel: View {
     }
 }
 
-let locationOptions = ["欧阳修","木马森林","万达"]
+let locationOptions = ["欧阳修","木马森林","万达","炎梦"]
 
 let colorOptions: [(String, Color)] = [
     ("", .gray.opacity(0.3)),

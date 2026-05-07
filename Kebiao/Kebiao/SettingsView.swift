@@ -10,8 +10,6 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var importResult: (succeed: Int, errors: [String])? = nil
     @State private var showImportResult = false
-    @State private var showAddRule = false
-    @State private var editRule: SalaryRule? = nil
 
     var body: some View {
         NavigationStack {
@@ -37,23 +35,10 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    ForEach(store.salaryRules.sorted(by: { $0.minStudents < $1.minStudents })) { rule in
-                        HStack {
-                            let range = rule.maxStudents.map { "\(rule.minStudents)-\($0)人" } ?? "\(rule.minStudents)人以上"
-                            Text(range).font(.subheadline)
-                            Spacer()
-                            Text("¥\(rule.ratePerClass, specifier: "%.0f")/节").foregroundColor(.indigo).fontWeight(.medium)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { editRule = rule }
-                        .swipeActions { Button("删除", role: .destructive) { store.deleteSalaryRule(rule.id) } }
-                    }
-                    Button("添加规则") { showAddRule = true }
-                    Button("重置为默认") { store.resetSalaryRules() }.foregroundColor(.orange)
+                    Text("幼儿园：¥55/节").font(.caption)
+                    Text("超能星球：学生×7 + 助教×3").font(.caption)
                 } header: {
-                    Text("薪资规则 (阶梯)")
-                } footer: {
-                    Text("薪资规则仅在导入/导出时作为参考，当前工资计算使用：幼儿园¥55/节，超能星球学生×7+助教×3")
+                    Text("当前薪资标准")
                 }
             }
             .navigationTitle("设置")
@@ -80,8 +65,6 @@ struct SettingsView: View {
                 Text("成功导入 \(r.succeed) 条记录\(r.errors.isEmpty ? "" : "\n警告: \(r.errors.joined(separator: "; "))")")
             }
         }
-        .sheet(isPresented: $showAddRule) { SalaryRuleFormView(onSave: { store.addSalaryRule($0); showAddRule = false }) }
-        .sheet(item: $editRule) { rule in SalaryRuleFormView(rule: rule, onSave: { store.updateSalaryRule($0); editRule = nil }) }
     }
 
     // MARK: - Export
@@ -200,61 +183,5 @@ struct SettingsView: View {
             return Color(red: Double((rgb>>16)&0xFF)/255, green: Double((rgb>>8)&0xFF)/255, blue: Double(rgb&0xFF)/255)
         }
         return c.isKindergarten ? .green : .orange
-    }
-}
-
-// MARK: - Salary Rule Form
-struct SalaryRuleFormView: View {
-    var rule: SalaryRule? = nil
-    var onSave: (SalaryRule) -> Void
-    @Environment(\.dismiss) var dismiss
-
-    @State private var minStudents = ""
-    @State private var maxStudents = ""
-    @State private var ratePerClass = ""
-
-    init(rule: SalaryRule? = nil, onSave: @escaping (SalaryRule) -> Void) {
-        self.rule = rule
-        self.onSave = onSave
-        if let r = rule {
-            _minStudents = State(initialValue: String(r.minStudents))
-            _maxStudents = State(initialValue: r.maxStudents.map { String($0) } ?? "")
-            _ratePerClass = State(initialValue: String(Int(r.ratePerClass)))
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("学生人数区间") {
-                    HStack {
-                        TextField("最低", text: $minStudents).keyboardType(.numberPad)
-                        Text("—")
-                        TextField("最高(留空=不限)", text: $maxStudents).keyboardType(.numberPad)
-                    }
-                }
-                Section {
-                    HStack {
-                        Text("¥")
-                        TextField("每节课课时费", text: $ratePerClass).keyboardType(.decimalPad)
-                    }
-                }
-            }
-            .navigationTitle(rule == nil ? "添加规则" : "编辑规则")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        let mn = Int(minStudents) ?? 0
-                        let mx = maxStudents.isEmpty ? nil : Int(maxStudents)
-                        let rate = Double(ratePerClass) ?? 0
-                        var r = rule ?? SalaryRule(minStudents: mn, maxStudents: mx, ratePerClass: rate)
-                        r.minStudents = mn; r.maxStudents = mx; r.ratePerClass = rate
-                        onSave(r)
-                    }
-                    .disabled(minStudents.isEmpty || ratePerClass.isEmpty)
-                }
-            }
-        }
     }
 }
