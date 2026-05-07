@@ -14,8 +14,8 @@ jobs:
             -framework SwiftUI -framework Foundation -framework UniformTypeIdentifiers \
             *.swift
           mkdir -p ~/Payload/Kebiao.app
-          # Copy app icon
-          cp AppIcon-180.png ~/Payload/Kebiao.app/
+          # Copy app icon (repo root → app bundle)
+          cp ../../AppIcon-180.png ~/Payload/Kebiao.app/
           cat > ~/Payload/Kebiao.app/Info.plist << 'PEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
