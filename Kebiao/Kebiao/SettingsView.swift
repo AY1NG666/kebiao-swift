@@ -179,12 +179,16 @@ struct SettingsView: View {
     // MARK: - Import
     private func handleImport(_ urls: [URL]) {
         guard let url = urls.first else { return }
-        guard url.startAccessingSecurityScopedResource() else {
-            importResult = (0, ["无法访问文件（安全限制）"])
-            showImportResult = true
-            return
+        // asCopy=true already provides a local copy — no security scope needed
+        let needsSecurityScope = !url.path.hasPrefix(NSTemporaryDirectory())
+        if needsSecurityScope {
+            guard url.startAccessingSecurityScopedResource() else {
+                importResult = (0, ["无法访问文件（安全限制）"])
+                showImportResult = true
+                return
+            }
         }
-        defer { url.stopAccessingSecurityScopedResource() }
+        defer { if needsSecurityScope { url.stopAccessingSecurityScopedResource() } }
 
         var content: String? = nil
         for enc in [String.Encoding.utf8, .init(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))] {
