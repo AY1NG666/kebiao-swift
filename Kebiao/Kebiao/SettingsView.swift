@@ -6,7 +6,7 @@ struct SettingsView: View {
     @State private var editCourse: Course? = nil
     @State private var showAdd = false
     @State private var showExport = false
-    @State private var exportText = ""
+    @State private var exportFileURL: URL? = nil
     @State private var showImporter = false
     @State private var importResult: (succeed: Int, errors: [String])? = nil
     @State private var showImportResult = false
@@ -100,13 +100,8 @@ struct SettingsView: View {
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
         .sheet(item: $editCourse) { course in CourseFormView(course: course, onSave: { store.updateCourse($0); editCourse = nil }) }
         .sheet(isPresented: $showExport) {
-            NavigationStack {
-                ScrollView { Text(exportText).font(.system(size: 10, design: .monospaced)).padding() }
-                    .navigationTitle("导出数据")
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) { shareButton() }
-                        ToolbarItem(placement: .cancellationAction) { Button("关闭") { showExport = false } }
-                    }
+            if let url = exportFileURL {
+                ShareSheet(items: [url])
             }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [UTType.commaSeparatedText, UTType(filenameExtension: "csv") ?? .plainText], allowsMultipleSelection: false) { result in
@@ -137,18 +132,13 @@ struct SettingsView: View {
             csv += "\(df.string(from: a.date)),\(c?.name ?? "?"),\(c?.location ?? "?"),\(a.studentCount),\(a.assistantCount),\(rate),\(c?.isKindergarten == true ? "幼儿园" : "超能星球")\n"
         }
         csv += "\n--- 汇总 ---\n总课程数,\(store.courses.count)\n总出勤记录,\(store.attendances.count)\n总课时费,\(total)"
-        exportText = csv
-        showExport = true
-    }
 
-    private func shareButton() -> some View {
-        let tempDir = FileManager.default.temporaryDirectory
         let df = DateFormatter(); df.dateFormat = "yyyyMMdd"
+        let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("课表备份_\(df.string(from: Date())).csv")
-        if let _ = try? exportText.write(to: fileURL, atomically: true, encoding: .utf8) {
-            return AnyView(ShareLink(item: fileURL))
-        }
-        return AnyView(EmptyView())
+        try? csv.write(to: fileURL, atomically: true, encoding: .utf8)
+        exportFileURL = fileURL
+        showExport = true
     }
 
     // MARK: - Import
@@ -176,42 +166,54 @@ struct SettingsView: View {
         var importAttendances: [Attendance] = []
         var errors: [String] = []
         var section: String = ""
+        var skipNext = false  // skip header row after section marker
+
+        // Build name→Course map from existing store before any changes
+        var courseMap: [String: UUID] = [:]
+        for c in store.courses { courseMap[c.name] = c.id }
 
         let lines = content.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
 
         for line in lines {
             if line.isEmpty { continue }
             if line.hasPrefix("---") && line.hasSuffix("---") {
-                section = line; continue
+                section = line
+                skipNext = true
+                continue
             }
-            let cols = line.components(separatedBy: ",")
+            if skipNext { skipNext = false; continue }
+
+            let cols = parseCSVLine(line)
+
             if section.contains("课程表") {
-                guard cols.count >= 6 else { errors.append("课程行格式不对: \(line)"); continue }
+                guard cols.count >= 6 else { errors.append("课程行格式不对"); continue }
                 let name = cols[0]; let location = cols[1]
                 let dayStr = cols[2]; let start = cols[3]; let end = cols[4]
                 let isKinder = (cols.count > 5 && (cols[5].hasPrefix("是") || cols[5].hasPrefix("y") || cols[5].hasPrefix("Y")))
                 let color = cols.count > 7 ? cols[7] : ""
-                if let day = Int(dayStr), (1...7).contains(day) {
-                    importCourses.append(Course(name: name, location: location, dayOfWeek: day, startTime: start, endTime: end, isKindergarten: isKinder, colorHex: color))
-                } else {
-                    errors.append("无效星期: \(dayStr)")
-                }
+                guard let day = Int(dayStr), (1...7).contains(day) else { errors.append("无效星期: \(dayStr)"); continue }
+                let c = Course(name: name, location: location, dayOfWeek: day, startTime: start, endTime: end, isKindergarten: isKinder, colorHex: color)
+                importCourses.append(c)
+                courseMap[name] = c.id
             } else if section.contains("出勤记录") {
-                guard cols.count >= 4 else { errors.append("出勤行格式不对: \(line)"); continue }
+                guard cols.count >= 2 else { errors.append("出勤行格式不对"); continue }
                 let dateStr = cols[0]; let courseName = cols[1]
                 let studentCount = Int(cols.count > 3 ? cols[3] : "0") ?? 0
                 let assistantCount = Int(cols.count > 4 ? cols[4] : "0") ?? 0
 
                 guard let date = parseFlexibleDate(dateStr) else { errors.append("无效日期: \(dateStr)"); continue }
-                let matchedCourse = importCourses.first { $0.name == courseName } ?? store.courses.first { $0.name == courseName }
-                guard let course = matchedCourse else { errors.append("找不到课程: \(courseName)"); continue }
+                guard let courseId = courseMap[courseName] else { errors.append("找不到课程: \(courseName)"); continue }
                 let startOfDay = Calendar.current.startOfDay(for: date)
-                importAttendances.append(Attendance(courseId: course.id, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount))
+                importAttendances.append(Attendance(courseId: courseId, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount))
             }
         }
 
+        // Apply import
         if !importCourses.isEmpty {
-            store.courses = importCourses
+            // Keep existing courses that aren't being imported
+            let importNames = Set(importCourses.map { $0.name })
+            let keptCourses = store.courses.filter { !importNames.contains($0.name) }
+            store.courses = keptCourses + importCourses
             store.save()
         }
         var added = 0
@@ -228,10 +230,33 @@ struct SettingsView: View {
         return (courseCount + added, errors)
     }
 
+    // Parse CSV line respecting quoted fields (commas inside quotes)
+    private func parseCSVLine(_ line: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+        var inQuotes = false
+        for ch in line {
+            if ch == "\"" { inQuotes.toggle(); continue }
+            if ch == "," && !inQuotes { result.append(current); current = ""; continue }
+            current.append(ch)
+        }
+        result.append(current)
+        return result
+    }
+
     private func courseColor(_ c: Course) -> Color {
         if !c.colorHex.isEmpty, let rgb = Int(c.colorHex.dropFirst(), radix: 16) {
             return Color(red: Double((rgb>>16)&0xFF)/255, green: Double((rgb>>8)&0xFF)/255, blue: Double(rgb&0xFF)/255)
         }
         return c.isKindergarten ? .green : .orange
     }
+}
+
+// MARK: - Share sheet via UIActivityViewController
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

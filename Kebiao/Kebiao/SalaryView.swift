@@ -4,7 +4,8 @@ struct SalaryView: View {
     @EnvironmentObject var store: DataStore
     @State private var year = Calendar.current.component(.year, from: Date())
     @State private var month = Calendar.current.component(.month, from: Date())
-    @State private var displayTotal: Double = 0
+    @State private var displayTotal: Double = -1  // -1 = loading sentinel (Android pattern)
+    @State private var hasInitialLoad = false
 
     private var details: [SalaryDetail] { store.salaryForMonth(year: year, month: month) }
     private var total: Double { details.reduce(0) { $0 + $1.rate } }
@@ -15,25 +16,23 @@ struct SalaryView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
-                    // Total card
+                    // Total card (matching Android: indigo bg, white text)
                     VStack(spacing: 6) {
                         Text("课时费合计").font(.subheadline).foregroundColor(.white.opacity(0.85))
-                        Text("¥ \(displayTotal, specifier: "%.2f")")
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .contentTransition(.numericText())
+                        if displayTotal < 0 {
+                            Text("...").font(.system(size: 44, weight: .bold, design: .rounded)).foregroundColor(.white)
+                        } else {
+                            Text("¥ \(displayTotal, specifier: "%.2f")")
+                                .font(.system(size: 44, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .contentTransition(.numericText())
+                        }
                         Text("\(String(year))年\(month)月 · \(details.count)节课")
                             .font(.caption).foregroundColor(.white.opacity(0.7))
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 36)
                     .background(Color.indigo)
-                    .animation(.spring(response: 1.0, dampingFraction: 0.65), value: displayTotal)
-                    .onAppear { displayTotal = total }
-                    .onChange(of: total) { newVal in
-                        withAnimation(.spring(response: 1.0, dampingFraction: 0.65)) {
-                            displayTotal = newVal
-                        }
-                    }
+                    .animation(.easeInOut(duration: 0.8), value: displayTotal)
 
                     // Detail sections
                     VStack(spacing: 12) {
@@ -54,6 +53,23 @@ struct SalaryView: View {
                 ToolbarItem(placement: .principal) { Text("\(String(year))年\(month)月").font(.subheadline).fontWeight(.medium).foregroundColor(.indigo) }
                 ToolbarItem(placement: .topBarTrailing) { Button { nextMonth() } label: { Image(systemName: "chevron.right") } }
             }
+        }
+        .onAppear {
+            if !hasInitialLoad {
+                displayTotal = total  // show immediately, no animation on first load
+                hasInitialLoad = true
+            } else {
+                animateTotal()
+            }
+        }
+        .onChange(of: month) { _ in animateTotal() }
+        .onChange(of: year) { _ in animateTotal() }
+        .onChange(of: total) { _ in animateTotal() }
+    }
+
+    private func animateTotal() {
+        withAnimation(.easeInOut(duration: 0.8)) {
+            displayTotal = total
         }
     }
 
