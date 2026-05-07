@@ -22,18 +22,18 @@ jobs:
           <key>CFBundleIdentifier</key><string>com.ayng.kebiao</string>
           <key>CFBundleName</key><string>课表</string>
           <key>CFBundleDisplayName</key><string>课表</string>
-          <key>CFBundleVersion</key><string>7</string>
-          <key>CFBundleShortVersionString</key><string>1.2.4</string>
+          <key>CFBundleVersion</key><string>8</string>
+          <key>CFBundleShortVersionString</key><string>1.2.5</string>
           <key>CFBundlePackageType</key><string>APPL</string>
           <key>LSRequiresIPhoneOS</key><true/>
           <key>UILaunchScreen</key><dict/>
           </dict></plist>
           PEOF
           cp ~/Kebiao ~/Payload/Kebiao.app/
-          IPA_NAME="kebiao-v1.2.4-b7.ipa"
+          IPA_NAME="kebiao-v1.2.5-b8.ipa"
           cd ~ && zip -r "$IPA_NAME" Payload
           ls -lh ~/"$IPA_NAME"
           echo "ipa_path=~/${IPA_NAME}" >> $GITHUB_ENV
           echo "ipa_name=${IPA_NAME}" >> $GITHUB_ENV
       - uses: actions/upload-artifact@v4
-        with: { name: kebiao-ipa-v1.2.4-b7, path: ~/kebiao-v1.2.4-b7.ipa }
+        with: { name: kebiao-ipa-v1.2.5-b8, path: ~/kebiao-v1.2.5-b8.ipa }
