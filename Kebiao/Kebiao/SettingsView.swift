@@ -99,7 +99,7 @@ struct SettingsView: View {
             // fileImporter INSIDE NavigationStack to avoid sheet conflicts
             .fileImporter(
                 isPresented: $showImporter,
-                allowedContentTypes: [.plainText, .commaSeparatedText, .data],
+                allowedContentTypes: [.item],  // .item = allow any file, avoids CSV type mismatch
                 allowsMultipleSelection: false
             ) { result in
                 handleImport(result)
