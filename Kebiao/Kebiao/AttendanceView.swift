@@ -254,8 +254,6 @@ struct AddAttendanceView: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.subheadline)
                     }
-                    Spacer()
-                    Text("×7+助教×3").font(.caption2).foregroundColor(.orange.opacity(0.6))
                 }
             }
         }

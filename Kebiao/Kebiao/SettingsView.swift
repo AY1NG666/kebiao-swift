@@ -13,34 +13,88 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("课程管理（\(store.courses.count)门）") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Course management
+                    Text("课程管理").font(.subheadline).foregroundColor(.secondary).padding(.horizontal)
+
                     ForEach(store.courses) { course in
                         HStack {
                             Circle().fill(courseColor(course)).frame(width: 12, height: 12)
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(course.name).font(.subheadline).fontWeight(.medium)
-                                Text("\(course.location)  周\(["","一","二","三","四","五","六","日"][course.dayOfWeek]) \(course.startTime)-\(course.endTime)").font(.caption).foregroundColor(.secondary)
+                                Text("\(course.location)  周\(["","一","二","三","四","五","六","日"][course.dayOfWeek]) \(course.startTime)-\(course.endTime)")
+                                    .font(.caption).foregroundColor(.secondary)
                             }
                             Spacer()
-                        }.contentShape(Rectangle()).onTapGesture { editCourse = course }
-                        .swipeActions { Button("删除", role: .destructive) { store.deleteCourse(course.id) } }
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                        .padding(.horizontal)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editCourse = course }
                     }
-                    Button("手动添加课程") { showAdd = true }
-                }
 
-                Section("数据备份") {
-                    Button("导入数据 (CSV)") { showImporter = true }
-                    Button("导出全部数据") { exportAll() }
-                }
+                    Button {
+                        showAdd = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill").foregroundColor(.indigo)
+                            Text("手动添加课程").foregroundColor(.indigo)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                        .padding(.horizontal)
+                    }
 
-                Section {
-                    Text("幼儿园：¥55/节").font(.caption)
-                    Text("超能星球：学生×7 + 助教×3").font(.caption)
-                } header: {
-                    Text("当前薪资标准")
+                    // Data backup
+                    Text("数据备份").font(.subheadline).foregroundColor(.secondary).padding(.horizontal).padding(.top, 16)
+
+                    VStack(spacing: 0) {
+                        Button {
+                            showImporter = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down").frame(width: 24)
+                                Text("导入数据 (CSV)")
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider().padding(.leading, 48)
+
+                        Button {
+                            exportAll()
+                        } label: {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up").frame(width: 24)
+                                Text("导出全部数据")
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(Color(.systemBackground))
+                    .cornerRadius(10)
+                    .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                    .padding(.horizontal)
                 }
+                .padding(.vertical)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("设置")
         }
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
@@ -149,7 +203,6 @@ struct SettingsView: View {
                 let assistantCount = Int(cols.count > 4 ? cols[4] : "0") ?? 0
 
                 guard let date = parseFlexibleDate(dateStr) else { errors.append("无效日期: \(dateStr)"); continue }
-                // Match by course name (look in just-imported courses first, then existing)
                 let matchedCourse = importCourses.first { $0.name == courseName } ?? store.courses.first { $0.name == courseName }
                 guard let course = matchedCourse else { errors.append("找不到课程: \(courseName)"); continue }
                 let startOfDay = Calendar.current.startOfDay(for: date)
@@ -157,16 +210,13 @@ struct SettingsView: View {
             }
         }
 
-        // Apply import
         if !importCourses.isEmpty {
-            // Replace all courses with imported ones
             store.courses = importCourses
             store.save()
         }
         var added = 0
         if !importAttendances.isEmpty {
             for a in importAttendances {
-                // Skip if already exists
                 if !store.hasAttendanceFor(courseId: a.courseId, date: a.date) {
                     store.attendances.append(a)
                     added += 1
