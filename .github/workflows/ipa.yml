@@ -11,7 +11,7 @@ jobs:
           swiftc -o ~/Kebiao \
             -sdk $(xcrun --show-sdk-path --sdk iphoneos) \
             -target arm64-apple-ios16.0 \
-            -framework SwiftUI -framework Foundation \
+            -framework SwiftUI -framework Foundation -framework UniformTypeIdentifiers \
             *.swift
           mkdir -p ~/Payload/Kebiao.app
           cat > ~/Payload/Kebiao.app/Info.plist << 'PEOF'

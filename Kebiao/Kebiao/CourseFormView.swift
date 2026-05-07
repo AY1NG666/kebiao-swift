@@ -15,6 +15,20 @@ struct CourseFormView: View {
     @State private var isKinder = false
     @State private var colorHex = ""
 
+    private let dayAbbrs = ["一","二","三","四","五","六","日"]
+
+    private var durationText: String {
+        let sH = Int(startH) ?? 0; let sM = Int(startM) ?? 0
+        let eH = Int(endH) ?? 0; let eM = Int(endM) ?? 0
+        let sm = sH * 60 + sM
+        let em = eH * 60 + eM
+        let diff = em > sm ? em - sm : em + 1440 - sm
+        let hours = Double(diff) / 60.0
+        if hours == 0 { return "—" }
+        if hours == floor(hours) { return "\(Int(hours))小时" }
+        return String(format: "%.1f小时", hours)
+    }
+
     init(course: Course? = nil, onSave: @escaping (Course) -> Void) {
         self.course = course
         self.onSave = onSave
@@ -36,27 +50,79 @@ struct CourseFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("课程名称", text: $name)
-                Picker("上课地点", selection: $location) { ForEach(locationOptions, id: \.self) { Text($0) } }
-                Picker("星期", selection: $day) {
-                    ForEach(1..<8) { i in Text(["","周一","周二","周三","周四","周五","周六","周日"][i]).tag(i) }
+                Section {
+                    TextField("课程名称", text: $name)
                 }
-                Section("时间") {
-                    HStack {
-                        TextField("时", text: $startH).keyboardType(.numberPad).frame(width: 50)
-                        Text(":"); TextField("分", text: $startM).keyboardType(.numberPad).frame(width: 50)
-                        Text("→").foregroundColor(.secondary)
-                        TextField("时", text: $endH).keyboardType(.numberPad).frame(width: 50)
-                        Text(":"); TextField("分", text: $endM).keyboardType(.numberPad).frame(width: 50)
+
+                // Location chips
+                Section("上课地点") {
+                    HStack(spacing: 8) {
+                        ForEach(locationOptions, id: \.self) { loc in
+                            Button {
+                                location = loc
+                            } label: {
+                                Text(loc)
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(location == loc ? Color.indigo : Color(.systemGray5))
+                                    .foregroundColor(location == loc ? .white : .primary)
+                                    .cornerRadius(20)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
+
+                // Day of week chips
+                Section("星期") {
+                    HStack(spacing: 6) {
+                        ForEach(0..<7, id: \.self) { i in
+                            let d = i + 1
+                            Button {
+                                day = d
+                            } label: {
+                                Text(dayAbbrs[i])
+                                    .font(.system(size: 14, weight: day == d ? .bold : .regular))
+                                    .frame(width: 36, height: 36)
+                                    .background(day == d ? Color.indigo : Color(.systemGray5))
+                                    .foregroundColor(day == d ? .white : .primary)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Time section
+                Section {
+                    HStack {
+                        TextField("时", text: $startH).keyboardType(.numberPad).frame(width: 44)
+                        Text(":").foregroundColor(.secondary)
+                        TextField("分", text: $startM).keyboardType(.numberPad).frame(width: 44)
+                        Spacer()
+                        Text("→").foregroundColor(.secondary)
+                        Spacer()
+                        TextField("时", text: $endH).keyboardType(.numberPad).frame(width: 44)
+                        Text(":").foregroundColor(.secondary)
+                        TextField("分", text: $endM).keyboardType(.numberPad).frame(width: 44)
+                    }
+                    // Auto-calculated duration
+                    HStack {
+                        Text("课时长")
+                        Spacer()
+                        Text(durationText).foregroundColor(.indigo).fontWeight(.medium)
+                    }
+                }
+
                 Toggle("幼儿园课程（固定55元/节）", isOn: $isKinder)
+
+                // Color picker grid
                 Section("卡片颜色") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
                         ForEach(colorOptions, id: \.0) { hex, color in
                             Circle().fill(color).frame(width: 36, height: 36)
                                 .overlay(hex == colorHex ? Image(systemName: "checkmark").foregroundColor(.white).font(.caption2) : nil)
-                                .overlay(hex == colorHex ? Circle().stroke(Color.indigo, lineWidth: 3) : Circle().stroke(Color.clear))
+                                .overlay(hex == colorHex ? Circle().stroke(Color.indigo, lineWidth: 3) : Circle().stroke(Color(.systemGray4), lineWidth: 0.5))
                                 .onTapGesture { colorHex = hex }
                         }
                     }

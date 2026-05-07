@@ -16,17 +16,26 @@ struct SalaryView: View {
                 Section {} header: {
                     VStack(spacing: 8) {
                         Text("当月工资总额").font(.subheadline).foregroundColor(.white.opacity(0.8))
-                        Text("¥ \(total, specifier: "%.2f")").font(.system(size: 40, weight: .bold)).foregroundColor(.white)
+                        Text("¥ \(total, specifier: "%.2f")")
+                            .font(.system(size: 40, weight: .bold))
+                            .foregroundColor(.white)
+                            .contentTransition(.numericText())
                         Text("共 \(details.count) 节课").font(.caption).foregroundColor(.white.opacity(0.7))
-                    }.frame(maxWidth: .infinity).padding(.vertical, 24)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 24)
+                    .animation(.spring(response: 0.8, dampingFraction: 0.7), value: total)
                 }.listRowBackground(Color.indigo)
 
                 if !kinder.isEmpty {
                     Section("幼儿园  小计 ¥\(kinder.reduce(0){$0+$1.rate}, specifier: "%.2f")") {
                         ForEach(kinder) { d in
                             HStack {
-                                VStack(alignment: .leading) { Text(d.courseName).font(.headline); Text(d.date, style: .date).font(.caption) }
-                                Spacer(); Text("¥\(d.rate, specifier: "%.2f")").font(.title3).fontWeight(.semibold).foregroundColor(.green)
+                                VStack(alignment: .leading) {
+                                    Text(d.courseName).font(.headline)
+                                    Text(d.date, style: .date).font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Text("¥\(d.rate, specifier: "%.2f")").font(.title3).fontWeight(.semibold).foregroundColor(.green)
                             }
                         }
                     }
@@ -35,8 +44,12 @@ struct SalaryView: View {
                     Section("超能星球  小计 ¥\(normal.reduce(0){$0+$1.rate}, specifier: "%.2f")") {
                         ForEach(normal) { d in
                             HStack {
-                                VStack(alignment: .leading) { Text(d.courseName).font(.headline); Text(d.date, style: .date).font(.caption) }
-                                Spacer(); Text("¥\(d.rate, specifier: "%.2f")").font(.title3).fontWeight(.semibold).foregroundColor(.orange)
+                                VStack(alignment: .leading) {
+                                    Text(d.courseName).font(.headline)
+                                    Text(d.date, style: .date).font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Text("¥\(d.rate, specifier: "%.2f")").font(.title3).fontWeight(.semibold).foregroundColor(.orange)
                             }
                         }
                     }
@@ -45,6 +58,7 @@ struct SalaryView: View {
             .navigationTitle("课时费工资")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button { prevMonth() } label: { Image(systemName: "chevron.left") } }
+                ToolbarItem(placement: .principal) { Text("\(String(year))年\(month)月").font(.subheadline).fontWeight(.medium).foregroundColor(.indigo) }
                 ToolbarItem(placement: .topBarTrailing) { Button { nextMonth() } label: { Image(systemName: "chevron.right") } }
             }
         }

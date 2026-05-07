@@ -29,6 +29,13 @@ struct Attendance: Codable, Identifiable {
     var assistantCount: Int = 0
 }
 
+struct SalaryRule: Codable, Identifiable {
+    var id = UUID()
+    var minStudents: Int
+    var maxStudents: Int? = nil  // nil = no upper limit
+    var ratePerClass: Double
+}
+
 struct SalaryDetail: Identifiable {
     var id = UUID()
     var attendanceId: UUID
