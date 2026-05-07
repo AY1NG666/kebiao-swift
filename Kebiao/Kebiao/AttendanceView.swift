@@ -81,6 +81,13 @@ struct AttendanceView: View {
                             } else if store.isKinderCourse(a.courseId) {
                                 Image(systemName: "checkmark").foregroundColor(.green)
                             }
+                            Button {
+                                withAnimation { store.deleteAttendance(a.id) }
+                            } label: {
+                                Image(systemName: "trash").font(.caption).foregroundColor(.red.opacity(0.5))
+                                    .padding(.leading, 8)
+                            }
+                            .buttonStyle(.plain)
                         }
                         .padding()
                         .background(Color(.systemBackground))
@@ -89,9 +96,6 @@ struct AttendanceView: View {
                         .padding(.horizontal)
                         .contentShape(Rectangle())
                         .onTapGesture { editItem = a }
-                        .contextMenu {
-                            Button(role: .destructive) { store.deleteAttendance(a.id) } label: { Label("删除", systemImage: "trash") }
-                        }
                     }
                 }
                 .padding(.vertical)
@@ -334,6 +338,14 @@ struct EditAttendanceView: View {
             .navigationTitle("编辑出勤")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .bottomBar) {
+                    Button(role: .destructive) {
+                        store.deleteAttendance(attendance.id)
+                        dismiss()
+                    } label: {
+                        Label("删除此记录", systemImage: "trash")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         var a = attendance
