@@ -1,5 +1,13 @@
 # 课表 iOS 更新日志
 
+## v1.2.2 (build 5) - 2026-05-08
+
+### 修复
+- **导入**：`.fileImporter` 移入 NavigationStack 内部，避免与多层 sheet 冲突导致无法弹出
+- **导入**：UTType 扩展为 `.plainText + .commaSeparatedText + .data` 覆盖所有 CSV 文件
+- **导入**：支持 UTF-8 + GB18030 双编码，兼容中文系统导出的文件
+- **导入**：错误提示附带行号，空结果给出明确提示
+
 ## v1.2.1 (build 4) - 2026-05-08
 
 ### 修复

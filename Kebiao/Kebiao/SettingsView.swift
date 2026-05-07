@@ -96,6 +96,14 @@ struct SettingsView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("设置")
+            // fileImporter INSIDE NavigationStack to avoid sheet conflicts
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.plainText, .commaSeparatedText, .data],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result)
+            }
         }
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
         .sheet(item: $editCourse) { course in CourseFormView(course: course, onSave: { store.updateCourse($0); editCourse = nil }) }
@@ -103,9 +111,6 @@ struct SettingsView: View {
             if let url = exportFileURL {
                 ShareSheet(items: [url])
             }
-        }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [UTType.commaSeparatedText, UTType(filenameExtension: "csv") ?? .plainText], allowsMultipleSelection: false) { result in
-            handleImport(result)
         }
         .alert("导入结果", isPresented: $showImportResult) {
             Button("确定", role: .cancel) {}
@@ -145,14 +150,26 @@ struct SettingsView: View {
     private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard let url = urls.first, url.startAccessingSecurityScopedResource() else { return }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-                importResult = (0, ["无法读取文件"])
+            guard let url = urls.first else { return }
+            guard url.startAccessingSecurityScopedResource() else {
+                importResult = (0, ["无法访问文件（安全限制）"])
                 showImportResult = true
                 return
             }
-            let r = parseImportCSV(content)
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            // Try multiple encodings
+            var content: String? = nil
+            for enc in [String.Encoding.utf8, .init(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))] {
+                if let c = try? String(contentsOf: url, encoding: enc), !c.isEmpty { content = c; break }
+            }
+            guard let csvStr = content else {
+                importResult = (0, ["无法读取文件内容（编码错误）"])
+                showImportResult = true
+                return
+            }
+
+            let r = parseImportCSV(csvStr)
             importResult = r
             showImportResult = true
         case .failure(let error):
@@ -166,18 +183,21 @@ struct SettingsView: View {
         var importAttendances: [Attendance] = []
         var errors: [String] = []
         var section: String = ""
-        var skipNext = false  // skip header row after section marker
+        var skipNext = false
+        var lineNum = 0
 
-        // Build name→Course map from existing store before any changes
+        // Build name→Course map from existing store
         var courseMap: [String: UUID] = [:]
         for c in store.courses { courseMap[c.name] = c.id }
 
         let lines = content.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
 
         for line in lines {
+            lineNum += 1
             if line.isEmpty { continue }
-            if line.hasPrefix("---") && line.hasSuffix("---") {
-                section = line
+            if line.hasPrefix("---") {
+                // Section marker — extract readable section name
+                section = line.replacingOccurrences(of: "-", with: "").trimmingCharacters(in: .whitespaces)
                 skipNext = true
                 continue
             }
@@ -186,31 +206,36 @@ struct SettingsView: View {
             let cols = parseCSVLine(line)
 
             if section.contains("课程表") {
-                guard cols.count >= 6 else { errors.append("课程行格式不对"); continue }
+                guard cols.count >= 6 else { errors.append("第\(lineNum)行: 列数不够"); continue }
+                let dayStr = cols[2].trimmingCharacters(in: .whitespaces)
+                guard let day = Int(dayStr), (1...7).contains(day) else { errors.append("第\(lineNum)行: 无效星期 '\(dayStr)'"); continue }
                 let name = cols[0]; let location = cols[1]
-                let dayStr = cols[2]; let start = cols[3]; let end = cols[4]
-                let isKinder = (cols.count > 5 && (cols[5].hasPrefix("是") || cols[5].hasPrefix("y") || cols[5].hasPrefix("Y")))
+                let start = cols[3]; let end = cols[4]
+                let isKinder = cols.count > 5 && (cols[5].hasPrefix("是") || cols[5].hasPrefix("1") || cols[5].lowercased().hasPrefix("y"))
                 let color = cols.count > 7 ? cols[7] : ""
-                guard let day = Int(dayStr), (1...7).contains(day) else { errors.append("无效星期: \(dayStr)"); continue }
                 let c = Course(name: name, location: location, dayOfWeek: day, startTime: start, endTime: end, isKindergarten: isKinder, colorHex: color)
                 importCourses.append(c)
                 courseMap[name] = c.id
             } else if section.contains("出勤记录") {
-                guard cols.count >= 2 else { errors.append("出勤行格式不对"); continue }
+                guard cols.count >= 2 else { errors.append("第\(lineNum)行: 列数不够"); continue }
                 let dateStr = cols[0]; let courseName = cols[1]
                 let studentCount = Int(cols.count > 3 ? cols[3] : "0") ?? 0
                 let assistantCount = Int(cols.count > 4 ? cols[4] : "0") ?? 0
 
-                guard let date = parseFlexibleDate(dateStr) else { errors.append("无效日期: \(dateStr)"); continue }
-                guard let courseId = courseMap[courseName] else { errors.append("找不到课程: \(courseName)"); continue }
+                guard let date = parseFlexibleDate(dateStr) else { errors.append("第\(lineNum)行: 无效日期 '\(dateStr)'"); continue }
+                guard let courseId = courseMap[courseName] else { errors.append("第\(lineNum)行: 找不到课程 '\(courseName)'"); continue }
                 let startOfDay = Calendar.current.startOfDay(for: date)
                 importAttendances.append(Attendance(courseId: courseId, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount))
             }
+            // Ignore summary section
+        }
+
+        if importCourses.isEmpty && importAttendances.isEmpty {
+            return (0, ["未识别到任何课程或出勤数据，请确认CSV格式正确"])
         }
 
         // Apply import
         if !importCourses.isEmpty {
-            // Keep existing courses that aren't being imported
             let importNames = Set(importCourses.map { $0.name })
             let keptCourses = store.courses.filter { !importNames.contains($0.name) }
             store.courses = keptCourses + importCourses
@@ -222,6 +247,8 @@ struct SettingsView: View {
                 if !store.hasAttendanceFor(courseId: a.courseId, date: a.date) {
                     store.attendances.append(a)
                     added += 1
+                } else {
+                    errors.append("跳过重复: \(courseMap.first(where:{$0.value==a.courseId})?.key ?? "?") \(a.date)")
                 }
             }
             store.save()
@@ -230,17 +257,16 @@ struct SettingsView: View {
         return (courseCount + added, errors)
     }
 
-    // Parse CSV line respecting quoted fields (commas inside quotes)
     private func parseCSVLine(_ line: String) -> [String] {
         var result: [String] = []
         var current = ""
         var inQuotes = false
         for ch in line {
             if ch == "\"" { inQuotes.toggle(); continue }
-            if ch == "," && !inQuotes { result.append(current); current = ""; continue }
+            if ch == "," && !inQuotes { result.append(current.trimmingCharacters(in: .whitespaces)); current = ""; continue }
             current.append(ch)
         }
-        result.append(current)
+        result.append(current.trimmingCharacters(in: .whitespaces))
         return result
     }
 
@@ -252,7 +278,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Share sheet via UIActivityViewController
+// MARK: - Share sheet
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
