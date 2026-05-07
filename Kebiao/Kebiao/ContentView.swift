@@ -15,10 +15,12 @@ struct ContentView: View {
 // MARK: - Helpers
 struct DayLabel: View {
     let day: Int; let date: Date
+    private var dateStr: String {
+        let fmt = DateFormatter(); fmt.dateFormat = "MM/dd"; return fmt.string(from: date)
+    }
     var body: some View {
         let labels = ["","周一","周二","周三","周四","周五","周六","周日"]
-        let fmt = DateFormatter(); fmt.dateFormat = "MM/dd"
-        Text("\(labels[day])  \(fmt.string(from: date))").font(.subheadline).foregroundColor(.indigo)
+        Text("\(labels[day])  \(dateStr)").font(.subheadline).foregroundColor(.indigo)
     }
 }
 
