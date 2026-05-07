@@ -1,0 +1,36 @@
+name: Build IPA
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and Package
+        run: |
+          cd Kebiao/Kebiao
+          swiftc -o ~/Kebiao \
+            -sdk $(xcrun --show-sdk-path --sdk iphoneos) \
+            -target arm64-apple-ios16.0 \
+            -framework SwiftUI -framework Foundation \
+            *.swift
+          mkdir -p ~/Payload/Kebiao.app
+          cat > ~/Payload/Kebiao.app/Info.plist << 'PEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>Kebiao</string>
+          <key>CFBundleIdentifier</key><string>com.ayng.kebiao</string>
+          <key>CFBundleName</key><string>课表</string>
+          <key>CFBundleDisplayName</key><string>课表</string>
+          <key>CFBundleVersion</key><string>1</string>
+          <key>CFBundleShortVersionString</key><string>1.0</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>LSRequiresIPhoneOS</key><true/>
+          <key>UILaunchScreen</key><dict/>
+          </dict></plist>
+          PEOF
+          cp ~/Kebiao ~/Payload/Kebiao.app/
+          cd ~ && zip -r kebiao.ipa Payload
+          ls -lh ~/kebiao.ipa
+      - uses: actions/upload-artifact@v4
+        with: { name: kebiao-ipa, path: ~/kebiao.ipa }
