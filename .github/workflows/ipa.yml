@@ -38,9 +38,10 @@ jobs:
           PEOF
           cp ~/Kebiao ~/Payload/Kebiao.app/
           IPA_NAME="kebiao-v1.4.0-b11.ipa"
-          cd ~ && zip -r "$IPA_NAME" Payload
-          ls -lh ~/"$IPA_NAME"
-          echo "ipa_path=~/${IPA_NAME}" >> $GITHUB_ENV
-          echo "ipa_name=${IPA_NAME}" >> $GITHUB_ENV
+          IPA_DIR="$HOME"
+          cd "$IPA_DIR" && zip -r "$IPA_NAME" Payload
+          ls -lh "$IPA_DIR/$IPA_NAME"
+          echo "ipa_dir=$IPA_DIR" >> $GITHUB_ENV
+          echo "ipa_name=$IPA_NAME" >> $GITHUB_ENV
       - uses: actions/upload-artifact@v4
-        with: { name: kebiao-ipa-v1.4.0-b11, path: ~/kebiao-v1.3.0-b10.ipa }
+        with: { name: kebiao-ipa-v1.4.0-b11, path: /Users/runner/kebiao-v*.ipa }
