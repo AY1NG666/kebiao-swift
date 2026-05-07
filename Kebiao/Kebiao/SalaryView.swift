@@ -4,6 +4,7 @@ struct SalaryView: View {
     @EnvironmentObject var store: DataStore
     @State private var year = Calendar.current.component(.year, from: Date())
     @State private var month = Calendar.current.component(.month, from: Date())
+    @State private var displayTotal: Double = 0
 
     private var details: [SalaryDetail] { store.salaryForMonth(year: year, month: month) }
     private var total: Double { details.reduce(0) { $0 + $1.rate } }
@@ -17,7 +18,7 @@ struct SalaryView: View {
                     // Total card
                     VStack(spacing: 6) {
                         Text("课时费合计").font(.subheadline).foregroundColor(.white.opacity(0.85))
-                        Text("¥ \(total, specifier: "%.2f")")
+                        Text("¥ \(displayTotal, specifier: "%.2f")")
                             .font(.system(size: 44, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .contentTransition(.numericText())
@@ -26,7 +27,13 @@ struct SalaryView: View {
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 36)
                     .background(Color.indigo)
-                    .animation(.spring(response: 0.8, dampingFraction: 0.7), value: total)
+                    .animation(.spring(response: 1.0, dampingFraction: 0.65), value: displayTotal)
+                    .onAppear { displayTotal = total }
+                    .onChange(of: total) { newVal in
+                        withAnimation(.spring(response: 1.0, dampingFraction: 0.65)) {
+                            displayTotal = newVal
+                        }
+                    }
 
                     // Detail sections
                     VStack(spacing: 12) {
@@ -68,13 +75,11 @@ struct SalaryView: View {
                     Spacer()
                     Text(d.date, style: .date).font(.caption).foregroundColor(.secondary)
                     Text("¥\(d.rate, specifier: "%.0f")")
-                        .font(.subheadline).fontWeight(.semibold)
-                        .foregroundColor(accentColor)
+                        .font(.subheadline).fontWeight(.semibold).foregroundColor(accentColor)
                         .frame(minWidth: 48, alignment: .trailing)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(Color(.systemBackground))
-                .cornerRadius(8)
+                .background(Color(.systemBackground)).cornerRadius(8)
             }
         }
     }

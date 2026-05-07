@@ -97,14 +97,18 @@ struct CourseFormView: View {
                 Section {
                     HStack {
                         TextField("时", text: $startH).keyboardType(.numberPad).frame(width: 44)
+                            .onChange(of: startH) { startH = String($0.filter { $0.isNumber }.prefix(2)) }
                         Text(":").foregroundColor(.secondary)
                         TextField("分", text: $startM).keyboardType(.numberPad).frame(width: 44)
+                            .onChange(of: startM) { startM = String($0.filter { $0.isNumber }.prefix(2)) }
                         Spacer()
                         Text("→").foregroundColor(.secondary)
                         Spacer()
                         TextField("时", text: $endH).keyboardType(.numberPad).frame(width: 44)
+                            .onChange(of: endH) { endH = String($0.filter { $0.isNumber }.prefix(2)) }
                         Text(":").foregroundColor(.secondary)
                         TextField("分", text: $endM).keyboardType(.numberPad).frame(width: 44)
+                            .onChange(of: endM) { endM = String($0.filter { $0.isNumber }.prefix(2)) }
                     }
                     // Auto-calculated duration
                     HStack {
@@ -133,8 +137,10 @@ struct CourseFormView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        let start = "\(startH.padding(toLength: 2, withPad: "0", startingAt: 0)):\(startM.padding(toLength: 2, withPad: "0", startingAt: 0))"
-                        let end = "\(endH.padding(toLength: 2, withPad: "0", startingAt: 0)):\(endM.padding(toLength: 2, withPad: "0", startingAt: 0))"
+                        let sh = min(Int(startH) ?? 0, 23); let sm = min(Int(startM) ?? 0, 59)
+                        let eh = min(Int(endH) ?? 0, 23); let em = min(Int(endM) ?? 0, 59)
+                        let start = String(format: "%02d:%02d", sh, sm)
+                        let end = String(format: "%02d:%02d", eh, em)
                         var c = course ?? Course(name: "", location: "", dayOfWeek: 1, startTime: "09:00", endTime: "10:30")
                         c.name = name; c.location = location; c.dayOfWeek = day
                         c.startTime = start; c.endTime = end; c.isKindergarten = isKinder; c.colorHex = colorHex

@@ -23,27 +23,25 @@ struct ScheduleView: View {
                     .font(.subheadline).fontWeight(.medium).foregroundColor(.indigo)
                     .padding(.vertical, 8)
 
-                // Day headers + date numbers in a swipeable horizontal scroll
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 0) {
-                        ForEach(0..<7, id: \.self) { i in
-                            let day = weekDays[i]
-                            let isToday = Calendar.current.isDateInToday(day)
-                            VStack(spacing: 4) {
-                                Text(["一","二","三","四","五","六","日"][i]).font(.caption).foregroundColor(.secondary)
-                                Text("\(Calendar.current.component(.day, from: day))")
-                                    .font(.system(size: 16, weight: isToday ? .bold : .regular))
-                                    .foregroundColor(isToday ? .white : .primary)
-                                    .frame(width: 32, height: 32)
-                                    .background(isToday ? Color.indigo : Color.clear)
-                                    .clipShape(Circle())
-                            }
-                            .frame(width: (UIScreen.main.bounds.width - 32) / 7)
+                // Day headers
+                HStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { i in
+                        let day = weekDays[i]
+                        let isToday = Calendar.current.isDateInToday(day)
+                        VStack(spacing: 4) {
+                            Text(["一","二","三","四","五","六","日"][i]).font(.caption).foregroundColor(.secondary)
+                            Text("\(Calendar.current.component(.day, from: day))")
+                                .font(.system(size: 16, weight: isToday ? .bold : .regular))
+                                .foregroundColor(isToday ? .white : .primary)
+                                .frame(width: 32, height: 32)
+                                .background(isToday ? Color.indigo : Color.clear)
+                                .clipShape(Circle())
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 16)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 8)
                 .background(Color(.systemBackground))
 
                 Divider()
@@ -81,13 +79,12 @@ struct ScheduleView: View {
                                                         Image(systemName: "checkmark.circle.fill").font(.caption).foregroundColor(.green)
                                                     }
                                                 }
-                                                Text("\(course.startTime)-\(course.endTime)  |  \(course.location)").font(.caption).foregroundColor(.secondary)
+                                                Text("\(course.startTime)-\(course.endTime)  |  \(course.location)")
+                                                    .font(.caption).foregroundColor(.secondary)
                                             }
                                             Spacer()
                                         }
-                                        .padding(8)
-                                        .background(Color(.systemBackground))
-                                        .cornerRadius(10)
+                                        .padding(8).background(Color(.systemBackground)).cornerRadius(10)
                                         .padding(.horizontal, 8).padding(.vertical, 2)
                                         .opacity(recorded ? 0.55 : 1.0)
                                     }
@@ -102,14 +99,19 @@ struct ScheduleView: View {
             .navigationBarTitleDisplayMode(.inline)
             .overlay(alignment: .bottomTrailing) {
                 Button { showAdd = true } label: {
-                    Image(systemName: "plus").font(.title2).foregroundColor(.white).frame(width: 56, height: 56).background(Color.indigo).clipShape(Circle()).padding()
+                    Image(systemName: "plus").font(.title2).foregroundColor(.white)
+                        .frame(width: 56, height: 56).background(Color.indigo).clipShape(Circle()).padding()
                 }
             }
-            .gesture(
-                DragGesture(minimumDistance: 50)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 20, coordinateSpace: .local)
                     .onEnded { value in
-                        if value.translation.width < -50 { weekOffset += 1 }
-                        else if value.translation.width > 50 { weekOffset -= 1 }
+                        let h = value.translation.width
+                        let v = value.translation.height
+                        guard abs(h) > abs(v) && abs(h) > 20 else { return }
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            weekOffset += h < 0 ? 1 : -1
+                        }
                     }
             )
         }
@@ -117,8 +119,7 @@ struct ScheduleView: View {
     }
 
     private func monthLabel() -> String {
-        let firstDay = weekDays[0]
-        let lastDay = weekDays[6]
+        let firstDay = weekDays[0]; let lastDay = weekDays[6]
         let cal = Calendar.current
         let c1 = cal.dateComponents([.year, .month], from: firstDay)
         let c2 = cal.dateComponents([.year, .month], from: lastDay)
