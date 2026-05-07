@@ -1,6 +1,39 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Document picker wrapper (replaces .fileImporter to fix delegate callback bug)
+struct DocumentPicker: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    var onPick: ([URL]) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: DocumentPicker
+
+        init(_ parent: DocumentPicker) { self.parent = parent }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            parent.isPresented = false
+            parent.onPick(urls)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            parent.isPresented = false
+        }
+    }
+}
+
+// MARK: - SettingsView
 struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     @State private var editCourse: Course? = nil
@@ -96,20 +129,17 @@ struct SettingsView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("设置")
-            // fileImporter INSIDE NavigationStack to avoid sheet conflicts
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: [.item],  // .item = allow any file, avoids CSV type mismatch
-                allowsMultipleSelection: false
-            ) { result in
-                handleImport(result)
-            }
         }
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
         .sheet(item: $editCourse) { course in CourseFormView(course: course, onSave: { store.updateCourse($0); editCourse = nil }) }
         .sheet(isPresented: $showExport) {
             if let url = exportFileURL {
                 ShareSheet(items: [url])
+            }
+        }
+        .sheet(isPresented: $showImporter) {
+            DocumentPicker(isPresented: $showImporter) { urls in
+                handleImport(urls)
             }
         }
         .alert("导入结果", isPresented: $showImportResult) {
@@ -147,35 +177,28 @@ struct SettingsView: View {
     }
 
     // MARK: - Import
-    private func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            guard url.startAccessingSecurityScopedResource() else {
-                importResult = (0, ["无法访问文件（安全限制）"])
-                showImportResult = true
-                return
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-
-            // Try multiple encodings
-            var content: String? = nil
-            for enc in [String.Encoding.utf8, .init(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))] {
-                if let c = try? String(contentsOf: url, encoding: enc), !c.isEmpty { content = c; break }
-            }
-            guard let csvStr = content else {
-                importResult = (0, ["无法读取文件内容（编码错误）"])
-                showImportResult = true
-                return
-            }
-
-            let r = parseImportCSV(csvStr)
-            importResult = r
+    private func handleImport(_ urls: [URL]) {
+        guard let url = urls.first else { return }
+        guard url.startAccessingSecurityScopedResource() else {
+            importResult = (0, ["无法访问文件（安全限制）"])
             showImportResult = true
-        case .failure(let error):
-            importResult = (0, [error.localizedDescription])
-            showImportResult = true
+            return
         }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        var content: String? = nil
+        for enc in [String.Encoding.utf8, .init(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))] {
+            if let c = try? String(contentsOf: url, encoding: enc), !c.isEmpty { content = c; break }
+        }
+        guard let csvStr = content else {
+            importResult = (0, ["无法读取文件内容（编码错误）"])
+            showImportResult = true
+            return
+        }
+
+        let r = parseImportCSV(csvStr)
+        importResult = r
+        showImportResult = true
     }
 
     private func parseImportCSV(_ content: String) -> (succeed: Int, errors: [String]) {
@@ -186,7 +209,6 @@ struct SettingsView: View {
         var skipNext = false
         var lineNum = 0
 
-        // Build name→Course map from existing store
         var courseMap: [String: UUID] = [:]
         for c in store.courses { courseMap[c.name] = c.id }
 
@@ -196,7 +218,6 @@ struct SettingsView: View {
             lineNum += 1
             if line.isEmpty { continue }
             if line.hasPrefix("---") {
-                // Section marker — extract readable section name
                 section = line.replacingOccurrences(of: "-", with: "").trimmingCharacters(in: .whitespaces)
                 skipNext = true
                 continue
@@ -227,14 +248,12 @@ struct SettingsView: View {
                 let startOfDay = Calendar.current.startOfDay(for: date)
                 importAttendances.append(Attendance(courseId: courseId, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount))
             }
-            // Ignore summary section
         }
 
         if importCourses.isEmpty && importAttendances.isEmpty {
             return (0, ["未识别到任何课程或出勤数据，请确认CSV格式正确"])
         }
 
-        // Apply import
         if !importCourses.isEmpty {
             let importNames = Set(importCourses.map { $0.name })
             let keptCourses = store.courses.filter { !importNames.contains($0.name) }
