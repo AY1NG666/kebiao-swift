@@ -123,80 +123,49 @@ struct AttendanceView: View {
     private func nextMonth() { if month == 12 { year += 1; month = 1 } else { month += 1 } }
 }
 
-// MARK: - AddAttendanceView (auto-detect today's date)
+// MARK: - AddAttendanceView (schedule mode + custom mode)
 struct AddAttendanceView: View {
     @EnvironmentObject var store: DataStore
     var onSave: ([Attendance]) -> Void
     @Environment(\.dismiss) var dismiss
 
+    @State private var mode = 0 // 0=课表, 1=自定义
     @State private var selectedDate: Date
     @State private var dayCourses: [Course] = []
     @State private var entries: [UUID: (studentCount: String, assistantCount: String, enabled: Bool)] = [:]
 
+    // Custom mode state
+    @State private var customCourseId: UUID?
+    @State private var customStudentCount = ""
+    @State private var customAssistantCount = "0"
+    @State private var customKinderToggled = false
+
     init(onSave: @escaping ([Attendance]) -> Void) {
         self.onSave = onSave
-        let today = Calendar.current.startOfDay(for: Date())
-        _selectedDate = State(initialValue: today)
+        _selectedDate = State(initialValue: Calendar.current.startOfDay(for: Date()))
     }
 
     private var hasTodayCourses: Bool { !dayCourses.isEmpty }
     private var pendingCourses: [Course] { dayCourses.filter { !store.hasAttendanceFor(courseId: $0.id, date: selectedDate) } }
     private var recordedCourses: [Course] { dayCourses.filter { store.hasAttendanceFor(courseId: $0.id, date: selectedDate) } }
+    private var customSelectedCourse: Course? { store.courses.first { $0.id == customCourseId } }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Date header
-                    VStack(spacing: 4) {
-                        Text(selectedDate, style: .date)
-                            .font(.title2).fontWeight(.bold).foregroundColor(.indigo)
-                        Text("周\(dayNames[Calendar.current.component(.weekday, from: selectedDate) == 1 ? 7 : Calendar.current.component(.weekday, from: selectedDate) - 1])")
-                            .font(.subheadline).foregroundColor(.secondary)
+                    // Mode picker
+                    Picker("模式", selection: $mode) {
+                        Text("课表出勤").tag(0)
+                        Text("自定义出勤").tag(1)
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.indigo.opacity(0.08)).cornerRadius(12).padding(.horizontal)
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
 
-                    // Date picker for changing date
-                    DatePicker("修改日期", selection: $selectedDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .padding(.horizontal)
-                        .onChange(of: selectedDate) { _ in loadCourses() }
-
-                    if dayCourses.isEmpty {
-                        VStack(spacing: 8) {
-                            Image(systemName: "calendar.badge.exclamationmark").font(.system(size: 40)).foregroundColor(.secondary)
-                            Text("当天无课程安排").foregroundColor(.secondary)
-                        }.frame(maxWidth: .infinity).padding(.top, 32)
+                    if mode == 0 {
+                        scheduleModeContent
                     } else {
-                        // Already recorded
-                        if !recordedCourses.isEmpty {
-                            Text("已录入").font(.subheadline).foregroundColor(.secondary).padding(.horizontal)
-                            ForEach(recordedCourses) { course in
-                                HStack {
-                                    RoundedRectangle(cornerRadius: 2).fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 4, height: 32)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(course.name).font(.subheadline).fontWeight(.medium)
-                                        Text("\(course.startTime)-\(course.endTime)").font(.caption).foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                                }
-                                .padding().background(Color(.systemBackground)).cornerRadius(10)
-                                .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
-                                .padding(.horizontal)
-                            }
-                        }
-
-                        // Pending courses
-                        if !pendingCourses.isEmpty {
-                            Text(recordedCourses.isEmpty ? "当天课程（\(dayCourses.count)门）" : "待录入（\(pendingCourses.count)门）")
-                                .font(.subheadline).foregroundColor(.secondary).padding(.horizontal)
-
-                            ForEach(pendingCourses) { course in
-                                pendingCourseCard(course: course)
-                            }
-                        }
+                        customModeContent
                     }
                 }
                 .padding(.vertical)
@@ -207,12 +176,141 @@ struct AddAttendanceView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { saveAll() }
-                        .disabled(!hasTodayCourses || !hasAnyEntry())
+                    Button("保存") {
+                        if mode == 0 { saveSchedule() }
+                        else { saveCustom() }
+                    }
+                    .disabled(mode == 0 ? (!hasTodayCourses || !hasAnyScheduleEntry())
+                              : customCourseId == nil || (customSelectedCourse?.isKindergarten == false && customStudentCount.isEmpty))
                 }
             }
         }
         .onAppear { loadCourses() }
+    }
+
+    // MARK: - Schedule mode
+    @ViewBuilder
+    private var scheduleModeContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 4) {
+                Text(selectedDate, style: .date)
+                    .font(.title2).fontWeight(.bold).foregroundColor(.indigo)
+                Text("周\(dayNames[Calendar.current.component(.weekday, from: selectedDate) == 1 ? 7 : Calendar.current.component(.weekday, from: selectedDate) - 1])")
+                    .font(.subheadline).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 12)
+            .background(Color.indigo.opacity(0.08)).cornerRadius(12).padding(.horizontal)
+
+            DatePicker("修改日期", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.compact).padding(.horizontal)
+                .onChange(of: selectedDate) { _ in loadCourses() }
+
+            if dayCourses.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "calendar.badge.exclamationmark").font(.system(size: 40)).foregroundColor(.secondary)
+                    Text("当天无课程安排，可切换到自定义出勤").foregroundColor(.secondary)
+                }.frame(maxWidth: .infinity).padding(.top, 32)
+            } else {
+                if !recordedCourses.isEmpty {
+                    Text("已录入").font(.subheadline).foregroundColor(.secondary).padding(.horizontal)
+                    ForEach(recordedCourses) { course in
+                        recordedCourseCard(course: course)
+                    }
+                }
+                if !pendingCourses.isEmpty {
+                    Text(recordedCourses.isEmpty ? "当天课程（\(dayCourses.count)门）" : "待录入（\(pendingCourses.count)门）")
+                        .font(.subheadline).foregroundColor(.secondary).padding(.horizontal)
+                    ForEach(pendingCourses) { course in
+                        pendingCourseCard(course: course)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Custom mode
+    @ViewBuilder
+    private var customModeContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            DatePicker("选择日期", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .padding()
+                .background(Color(.systemBackground)).cornerRadius(10).shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("选择课程").font(.subheadline).foregroundColor(.secondary)
+                ForEach(store.courses) { course in
+                    Button {
+                        customCourseId = course.id
+                        if course.isKindergarten { customStudentCount = ""; customKinderToggled = false }
+                    } label: {
+                        HStack {
+                            Circle().fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 10, height: 10)
+                            Text(course.name).font(.subheadline)
+                            Spacer()
+                            if customCourseId == course.id {
+                                Image(systemName: "checkmark").foregroundColor(.indigo).fontWeight(.bold)
+                            }
+                        }
+                        .padding()
+                        .background(customCourseId == course.id ? Color.indigo.opacity(0.08) : Color(.systemBackground))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground)).cornerRadius(10).shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+            .padding(.horizontal)
+
+            if let course = customSelectedCourse {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        RoundedRectangle(cornerRadius: 2).fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 4, height: 20)
+                        Text(course.name).font(.subheadline).fontWeight(.semibold)
+                        Spacer()
+                        Text("\(course.startTime)-\(course.endTime)").font(.caption).foregroundColor(.secondary)
+                    }
+                    if course.isKindergarten {
+                        Toggle("到课（¥55/节）", isOn: $customKinderToggled).tint(.green)
+                    } else {
+                        HStack(spacing: 16) {
+                            HStack(spacing: 6) {
+                                Text("学生"); TextField("0", text: $customStudentCount)
+                                    .keyboardType(.numberPad).frame(width: 48).multilineTextAlignment(.center)
+                                    .textFieldStyle(.roundedBorder).font(.subheadline)
+                            }
+                            HStack(spacing: 6) {
+                                Text("助教"); TextField("0", text: $customAssistantCount)
+                                    .keyboardType(.numberPad).frame(width: 48).multilineTextAlignment(.center)
+                                    .textFieldStyle(.roundedBorder).font(.subheadline)
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground)).cornerRadius(10).shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    // MARK: - Card helpers
+    @ViewBuilder
+    private func recordedCourseCard(course: Course) -> some View {
+        HStack {
+            RoundedRectangle(cornerRadius: 2).fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 4, height: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(course.name).font(.subheadline).fontWeight(.medium)
+                Text("\(course.startTime)-\(course.endTime)").font(.caption).foregroundColor(.secondary)
+            }
+            Spacer()
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+        }
+        .padding().background(Color(.systemBackground)).cornerRadius(10)
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1).padding(.horizontal)
     }
 
     @ViewBuilder
@@ -222,11 +320,8 @@ struct AddAttendanceView: View {
                 RoundedRectangle(cornerRadius: 2).fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 4, height: 20)
                 Text(course.name).font(.subheadline).fontWeight(.semibold)
                 Spacer()
-                if course.isKindergarten {
-                    Text("¥55").font(.caption).foregroundColor(.green).fontWeight(.medium)
-                }
+                if course.isKindergarten { Text("¥55").font(.caption).foregroundColor(.green).fontWeight(.medium) }
             }
-
             if course.isKindergarten {
                 Toggle("到课", isOn: Binding(
                     get: { entries[course.id]?.enabled ?? false },
@@ -235,39 +330,33 @@ struct AddAttendanceView: View {
             } else {
                 HStack(spacing: 16) {
                     HStack(spacing: 6) {
-                        Text("学生")
-                        TextField("0", text: Binding(
+                        Text("学生"); TextField("0", text: Binding(
                             get: { entries[course.id]?.studentCount ?? "" },
                             set: { v in
                                 var e = entries[course.id] ?? ("", "0", true)
                                 e.studentCount = v; entries[course.id] = e
                             }
                         )).keyboardType(.numberPad).frame(width: 48).multilineTextAlignment(.center)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.subheadline)
+                            .textFieldStyle(.roundedBorder).font(.subheadline)
                     }
                     HStack(spacing: 6) {
-                        Text("助教")
-                        TextField("0", text: Binding(
+                        Text("助教"); TextField("0", text: Binding(
                             get: { entries[course.id]?.assistantCount ?? "0" },
                             set: { v in
                                 var e = entries[course.id] ?? ("", "0", true)
                                 e.assistantCount = v; entries[course.id] = e
                             }
                         )).keyboardType(.numberPad).frame(width: 48).multilineTextAlignment(.center)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.subheadline)
+                            .textFieldStyle(.roundedBorder).font(.subheadline)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(10)
-        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
-        .padding(.horizontal)
+        .padding().background(Color(.systemBackground)).cornerRadius(10)
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1).padding(.horizontal)
     }
 
+    // MARK: - Actions
     private func loadCourses() {
         let startOfDay = Calendar.current.startOfDay(for: selectedDate)
         let cal = Calendar.current
@@ -277,7 +366,7 @@ struct AddAttendanceView: View {
         entries = [:]
     }
 
-    private func hasAnyEntry() -> Bool {
+    private func hasAnyScheduleEntry() -> Bool {
         for course in pendingCourses {
             if course.isKindergarten {
                 if entries[course.id]?.enabled == true { return true }
@@ -288,7 +377,7 @@ struct AddAttendanceView: View {
         return false
     }
 
-    private func saveAll() {
+    private func saveSchedule() {
         var newAttendances: [Attendance] = []
         for course in pendingCourses {
             if course.isKindergarten {
@@ -305,6 +394,17 @@ struct AddAttendanceView: View {
             }
         }
         if !newAttendances.isEmpty { onSave(newAttendances) }
+    }
+
+    private func saveCustom() {
+        guard let cid = customCourseId else { return }
+        let course = store.courses.first { $0.id == cid }
+        if course?.isKindergarten == true && !customKinderToggled { return }
+        let sc = course?.isKindergarten == true ? 0 : (Int(customStudentCount) ?? 0)
+        let ac = course?.isKindergarten == true ? 0 : (Int(customAssistantCount) ?? 0)
+        if sc > 0 || ac > 0 || customKinderToggled {
+            onSave([Attendance(courseId: cid, date: selectedDate, studentCount: sc, assistantCount: ac)])
+        }
     }
 }
 
@@ -339,10 +439,7 @@ struct EditAttendanceView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .bottomBar) {
-                    Button(role: .destructive) {
-                        store.deleteAttendance(attendance.id)
-                        dismiss()
-                    } label: {
+                    Button(role: .destructive) { store.deleteAttendance(attendance.id); dismiss() } label: {
                         Label("删除此记录", systemImage: "trash")
                     }
                 }
