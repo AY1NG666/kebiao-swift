@@ -73,7 +73,12 @@ struct AttendanceView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(store.courseName(a.courseId)).font(.subheadline).fontWeight(.semibold)
-                                Text(a.date, style: .date).font(.caption).foregroundColor(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(a.date, style: .date).font(.caption).foregroundColor(.secondary)
+                                    if let n = a.note {
+                                        Text("· \(n)").font(.caption2).foregroundColor(.orange)
+                                    }
+                                }
                             }
                             Spacer()
                             if !store.isKinderCourse(a.courseId) && a.studentCount > 0 {
@@ -139,6 +144,10 @@ struct AddAttendanceView: View {
     @State private var customStudentCount = ""
     @State private var customAssistantCount = "0"
     @State private var customKinderToggled = false
+    @State private var customStartH = ""
+    @State private var customStartM = ""
+    @State private var customEndH = ""
+    @State private var customEndM = ""
 
     init(onSave: @escaping ([Attendance]) -> Void) {
         self.onSave = onSave
@@ -181,7 +190,7 @@ struct AddAttendanceView: View {
                         else { saveCustom() }
                     }
                     .disabled(mode == 0 ? (!hasTodayCourses || !hasAnyScheduleEntry())
-                              : customCourseId == nil || (customSelectedCourse?.isKindergarten == false && customStudentCount.isEmpty))
+                              : customCourseId == nil || (customSelectedCourse?.isKindergarten == false && customStudentCount.isEmpty) || (customSelectedCourse?.isKindergarten == true && !customKinderToggled))
                 }
             }
         }
@@ -288,6 +297,22 @@ struct AddAttendanceView: View {
                             }
                             Spacer()
                         }
+                    }
+                    // Custom time
+                    HStack {
+                        Text("时间").font(.caption).foregroundColor(.secondary)
+                        TextField("时", text: $customStartH).keyboardType(.numberPad).frame(width: 36)
+                            .onChange(of: customStartH) { customStartH = String($0.filter{$0.isNumber}.prefix(2)) }
+                        Text(":").foregroundColor(.secondary)
+                        TextField("分", text: $customStartM).keyboardType(.numberPad).frame(width: 36)
+                            .onChange(of: customStartM) { customStartM = String($0.filter{$0.isNumber}.prefix(2)) }
+                        Text("→").foregroundColor(.secondary)
+                        TextField("时", text: $customEndH).keyboardType(.numberPad).frame(width: 36)
+                            .onChange(of: customEndH) { customEndH = String($0.filter{$0.isNumber}.prefix(2)) }
+                        Text(":").foregroundColor(.secondary)
+                        TextField("分", text: $customEndM).keyboardType(.numberPad).frame(width: 36)
+                            .onChange(of: customEndM) { customEndM = String($0.filter{$0.isNumber}.prefix(2)) }
+                        Text("留空=原课时间").font(.caption2).foregroundColor(.secondary)
                     }
                 }
                 .padding()
@@ -402,8 +427,17 @@ struct AddAttendanceView: View {
         if course?.isKindergarten == true && !customKinderToggled { return }
         let sc = course?.isKindergarten == true ? 0 : (Int(customStudentCount) ?? 0)
         let ac = course?.isKindergarten == true ? 0 : (Int(customAssistantCount) ?? 0)
+        // Build custom time note
+        var note: String? = nil
+        if !customStartH.isEmpty || !customStartM.isEmpty || !customEndH.isEmpty || !customEndM.isEmpty {
+            let sh = customStartH.isEmpty ? "00" : customStartH.padding(toLength: 2, withPad: "0", startingAt: 0)
+            let sm = customStartM.isEmpty ? "00" : customStartM.padding(toLength: 2, withPad: "0", startingAt: 0)
+            let eh = customEndH.isEmpty ? "00" : customEndH.padding(toLength: 2, withPad: "0", startingAt: 0)
+            let em = customEndM.isEmpty ? "00" : customEndM.padding(toLength: 2, withPad: "0", startingAt: 0)
+            note = "\(sh):\(sm)-\(eh):\(em)"
+        }
         if sc > 0 || ac > 0 || customKinderToggled {
-            onSave([Attendance(courseId: cid, date: selectedDate, studentCount: sc, assistantCount: ac)])
+            onSave([Attendance(courseId: cid, date: selectedDate, studentCount: sc, assistantCount: ac, note: note)])
         }
     }
 }

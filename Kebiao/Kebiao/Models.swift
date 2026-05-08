@@ -27,6 +27,7 @@ struct Attendance: Codable, Identifiable {
     var date: Date
     var studentCount: Int = 0
     var assistantCount: Int = 0
+    var note: String? = nil  // custom time or memo (e.g. "14:00-15:00")
 }
 
 struct SalaryRule: Codable, Identifiable {
