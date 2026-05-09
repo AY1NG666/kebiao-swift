@@ -107,6 +107,7 @@ struct AttendanceView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("出勤记录")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button { prevMonth() } label: { Image(systemName: "chevron.left") } }
                 ToolbarItem(placement: .principal) { Text("\(String(year))年\(month)月").font(.subheadline).fontWeight(.medium).foregroundColor(.indigo) }

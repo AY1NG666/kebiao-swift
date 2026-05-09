@@ -43,6 +43,7 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var importResult: (succeed: Int, errors: [String])? = nil
     @State private var showImportResult = false
+    @State private var showChangelog = false
 
     var body: some View {
         NavigationStack {
@@ -124,11 +125,34 @@ struct SettingsView: View {
                     .cornerRadius(10)
                     .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
                     .padding(.horizontal)
+
+                    // Changelog
+                    Text("关于").font(.subheadline).foregroundColor(.secondary).padding(.horizontal).padding(.top, 16)
+
+                    Button {
+                        showChangelog = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.text").frame(width: 24)
+                            Text("更新日志")
+                            Spacer()
+                            Text("v1.5.2").font(.caption).foregroundColor(.secondary)
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(10)
+                    .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                    .padding(.horizontal)
                 }
                 .padding(.vertical)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
         .sheet(item: $editCourse) { course in CourseFormView(course: course, onSave: { store.updateCourse($0); editCourse = nil }) }
@@ -141,6 +165,9 @@ struct SettingsView: View {
             DocumentPicker(isPresented: $showImporter) { urls in
                 handleImport(urls)
             }
+        }
+        .sheet(isPresented: $showChangelog) {
+            ChangelogView()
         }
         .alert("导入结果", isPresented: $showImportResult) {
             Button("确定", role: .cancel) {}
@@ -302,6 +329,64 @@ struct SettingsView: View {
 }
 
 // MARK: - Share sheet
+// MARK: - Changelog view
+struct ChangelogView: View {
+    @Environment(\.dismiss) var dismiss
+
+    private let versions: [(String, String, [String])] = [
+        ("v1.5.2", "2026-05-08", ["工资页新增炎梦分组（蓝色），排在超能星球下方"]),
+        ("v1.5.1", "2026-05-08", ["自定义出勤支持修改上课时间（如 14:00-15:00），留空使用原课时间", "出勤列表自定义记录显示橙色时间标签"]),
+        ("v1.5.0", "2026-05-08", ["录入页新增「课表出勤/自定义出勤」双模式切换", "自定义模式可选任意日期+任意课程，解决补课调课"]),
+        ("v1.4.0", "2026-05-08", ["新增应用图标（indigo日历+彩色圆点）", "出勤卡片右侧垃圾桶按钮", "编辑弹窗底部删除按钮"]),
+        ("v1.3.0", "2026-05-08", ["修复 ScrollView 卡片无法删除出勤记录"]),
+        ("v1.2.6", "2026-05-08", ["修复导入 asCopy 返回本地副本后 security scope 拦截"]),
+        ("v1.2.5", "2026-05-08", ["修复 iCloud 文件下载后 delegate 无回调"]),
+        ("v1.2.4", "2026-05-08", ["改用自包装 UIDocumentPickerViewController 修复选文件无反应"]),
+        ("v1.2.3", "2026-05-08", ["UTType 改为 .item 修复 CSV 灰色无法选择"]),
+        ("v1.2.2", "2026-05-08", ["fileImporter 移入 NavigationStack 内部解冲突", "UTType 扩展覆盖所有 CSV", "UTF-8 + GB18030 双编码支持"]),
+        ("v1.2.1", "2026-05-08", ["修复导入表头被当数据、FK 映射、CSV 引号解析", "工资动画对齐 Android tween 800ms"]),
+        ("v1.2.0", "2026-05-08", ["课表手势改为 highPriorityGesture", "工资页上下翻动数字动画", "时间输入过滤小数点"]),
+        ("v1.1.0", "2026-05-08", ["课程卡片纯展示防误触", "日期左右滑动切周", "出勤自动识别今日日期", "工资页简约纯色风格", "设置页卡片化", "新增上课地点：炎梦"]),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(versions.indices, id: \.self) { i in
+                        let v = versions[i]
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(v.0).font(.headline).foregroundColor(.indigo)
+                                Text(v.1).font(.caption).foregroundColor(.secondary)
+                            }
+                            ForEach(v.2, id: \.self) { item in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Text("•").foregroundColor(.secondary)
+                                    Text(item).font(.subheadline)
+                                }
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.vertical)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("更新日志")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("关闭") { dismiss() } }
+            }
+        }
+    }
+}
+
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
