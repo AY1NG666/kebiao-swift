@@ -111,7 +111,7 @@ class DataStore: ObservableObject {
             let course = courses.first { $0.id == a.courseId }
             let isKinder = course?.isKindergarten ?? false
             let rate = isKinder ? 55.0 : Double(a.studentCount) * 7.0 + Double(a.assistantCount) * 3.0
-            return SalaryDetail(attendanceId: a.id, date: a.date, courseName: course?.name ?? "?", studentCount: a.studentCount, assistantCount: a.assistantCount, isKindergarten: isKinder, rate: rate)
+            return SalaryDetail(attendanceId: a.id, date: a.date, courseName: course?.name ?? "?", location: course?.location ?? "?", studentCount: a.studentCount, assistantCount: a.assistantCount, isKindergarten: isKinder, rate: rate)
         }.sorted { $0.date < $1.date }
     }
 

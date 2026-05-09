@@ -42,6 +42,7 @@ struct SalaryDetail: Identifiable {
     var attendanceId: UUID
     var date: Date
     var courseName: String
+    var location: String
     var studentCount: Int
     var assistantCount: Int
     var isKindergarten: Bool

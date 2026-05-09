@@ -9,8 +9,9 @@ struct SalaryView: View {
 
     private var details: [SalaryDetail] { store.salaryForMonth(year: year, month: month) }
     private var total: Double { details.reduce(0) { $0 + $1.rate } }
-    private var kinder: [SalaryDetail] { details.filter { $0.isKindergarten } }
-    private var normal: [SalaryDetail] { details.filter { !$0.isKindergarten } }
+    private var yanMeng: [SalaryDetail] { details.filter { $0.location == "炎梦" } }
+    private var kinder: [SalaryDetail] { details.filter { $0.isKindergarten && $0.location != "炎梦" } }
+    private var normal: [SalaryDetail] { details.filter { !$0.isKindergarten && $0.location != "炎梦" } }
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,9 @@ struct SalaryView: View {
                         }
                         if !normal.isEmpty {
                             categorySection(title: "超能星球", subtotal: normal.reduce(0){$0+$1.rate}, items: normal, accentColor: .orange)
+                        }
+                        if !yanMeng.isEmpty {
+                            categorySection(title: "炎梦", subtotal: yanMeng.reduce(0){$0+$1.rate}, items: yanMeng, accentColor: .blue)
                         }
                     }
                     .padding(16)
