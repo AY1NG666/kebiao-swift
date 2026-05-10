@@ -4,11 +4,9 @@ import SwiftUI
 class DataStore: ObservableObject {
     @Published var courses: [Course] = []
     @Published var attendances: [Attendance] = []
-    @Published var salaryRules: [SalaryRule] = []
 
     private let coursesKey = "kebiao_courses"
     private let attendancesKey = "kebiao_attendances"
-    private let rulesKey = "kebiao_rules"
 
     private var dataDir: URL {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -47,18 +45,6 @@ class DataStore: ObservableObject {
         else if let d = UserDefaults.standard.data(forKey: attendancesKey),
                 let a = try? JSONDecoder().decode([Attendance].self, from: d) { attendances = a.filter { $0.date.timeIntervalSince1970 > 0 } }
 
-        if let r: [SalaryRule] = loadFromFile("rules") { salaryRules = r }
-        else if let d = UserDefaults.standard.data(forKey: rulesKey),
-                let r = try? JSONDecoder().decode([SalaryRule].self, from: d) { salaryRules = r }
-
-        if salaryRules.isEmpty {
-            salaryRules = [
-                SalaryRule(minStudents: 0, maxStudents: 5, ratePerClass: 35),
-                SalaryRule(minStudents: 6, maxStudents: 10, ratePerClass: 50),
-                SalaryRule(minStudents: 11, maxStudents: nil, ratePerClass: 70)
-            ]
-        }
-
         // Migrate from UserDefaults to files on first load
         if !courses.isEmpty || !attendances.isEmpty { save() }
     }
@@ -66,19 +52,6 @@ class DataStore: ObservableObject {
     func save() {
         saveToFile(courses, name: "courses")
         saveToFile(attendances, name: "attendances")
-        saveToFile(salaryRules, name: "rules")
-    }
-
-    func addSalaryRule(_ r: SalaryRule) { salaryRules.append(r); save() }
-    func updateSalaryRule(_ r: SalaryRule) { if let i = salaryRules.firstIndex(where: { $0.id == r.id }) { salaryRules[i] = r; save() } }
-    func deleteSalaryRule(_ id: UUID) { salaryRules.removeAll { $0.id == id }; save() }
-    func resetSalaryRules() {
-        salaryRules = [
-            SalaryRule(minStudents: 0, maxStudents: 5, ratePerClass: 35),
-            SalaryRule(minStudents: 6, maxStudents: 10, ratePerClass: 50),
-            SalaryRule(minStudents: 11, maxStudents: nil, ratePerClass: 70)
-        ]
-        save()
     }
 
     func addCourse(_ c: Course) { courses.append(c); save() }

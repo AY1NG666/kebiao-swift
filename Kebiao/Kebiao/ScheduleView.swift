@@ -133,9 +133,7 @@ struct ScheduleView: View {
     }
 
     private func courseColor(_ c: Course) -> Color {
-        if !c.colorHex.isEmpty, let rgb = Int(c.colorHex.dropFirst(), radix: 16) {
-            return Color(red: Double((rgb>>16)&0xFF)/255, green: Double((rgb>>8)&0xFF)/255, blue: Double(rgb&0xFF)/255)
-        }
+        if !c.colorHex.isEmpty { return Color(hex: c.colorHex) }
         return c.isKindergarten ? .green : .orange
     }
 }

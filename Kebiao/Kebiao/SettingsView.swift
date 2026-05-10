@@ -38,8 +38,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: DataStore
     @State private var editCourse: Course? = nil
     @State private var showAdd = false
-    @State private var showExport = false
-    @State private var exportFileURL: URL? = nil
+    @State private var showExportError = false
     @State private var showImporter = false
     @State private var importResult: (succeed: Int, errors: [String])? = nil
     @State private var showImportResult = false
@@ -156,11 +155,6 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showAdd) { CourseFormView(onSave: { course in store.addCourse(course); showAdd = false }) }
         .sheet(item: $editCourse) { course in CourseFormView(course: course, onSave: { store.updateCourse($0); editCourse = nil }) }
-        .sheet(isPresented: $showExport) {
-            if let url = exportFileURL {
-                ShareSheet(items: [url])
-            }
-        }
         .sheet(isPresented: $showImporter) {
             DocumentPicker(isPresented: $showImporter) { urls in
                 handleImport(urls)
@@ -175,6 +169,11 @@ struct SettingsView: View {
             if let r = importResult {
                 Text("成功导入 \(r.succeed) 条记录\(r.errors.isEmpty ? "" : "\n警告: \(r.errors.joined(separator: "; "))")")
             }
+        }
+        .alert("导出失败", isPresented: $showExportError) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text("无法写入文件，请检查存储空间后重试")
         }
     }
 
@@ -198,9 +197,23 @@ struct SettingsView: View {
         let df = DateFormatter(); df.dateFormat = "yyyyMMdd"
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("课表备份_\(df.string(from: Date())).csv")
-        try? csv.write(to: fileURL, atomically: true, encoding: .utf8)
-        exportFileURL = fileURL
-        showExport = true
+        guard let _ = try? csv.write(to: fileURL, atomically: true, encoding: .utf8) else {
+            showExportError = true
+            return
+        }
+
+        // Present share sheet directly from UIKit window to avoid SwiftUI sheet conflict
+        let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let root = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
+            var top = root
+            while let presented = top.presentedViewController { top = presented }
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = top.view
+                popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY, width: 0, height: 0)
+            }
+            top.present(activityVC, animated: true)
+        }
     }
 
     // MARK: - Import
@@ -321,14 +334,11 @@ struct SettingsView: View {
     }
 
     private func courseColor(_ c: Course) -> Color {
-        if !c.colorHex.isEmpty, let rgb = Int(c.colorHex.dropFirst(), radix: 16) {
-            return Color(red: Double((rgb>>16)&0xFF)/255, green: Double((rgb>>8)&0xFF)/255, blue: Double(rgb&0xFF)/255)
-        }
+        if !c.colorHex.isEmpty { return Color(hex: c.colorHex) }
         return c.isKindergarten ? .green : .orange
     }
 }
 
-// MARK: - Share sheet
 // MARK: - Changelog view
 struct ChangelogView: View {
     @Environment(\.dismiss) var dismiss
@@ -387,12 +397,4 @@ struct ChangelogView: View {
             }
         }
     }
-}
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
