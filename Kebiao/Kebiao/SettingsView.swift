@@ -136,7 +136,7 @@ struct SettingsView: View {
                             Image(systemName: "doc.text").frame(width: 24)
                             Text("更新日志")
                             Spacer()
-                            Text("v1.5.2").font(.caption).foregroundColor(.secondary)
+                            Text("v3.0").font(.caption).foregroundColor(.secondary)
                             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         }
                         .padding()
@@ -334,7 +334,7 @@ struct ChangelogView: View {
     @Environment(\.dismiss) var dismiss
 
     private let versions: [(String, String, [String])] = [
-        ("v1.5.4", "2026-05-08", ["出勤列表底部留白防FAB遮挡删除按钮", "自定义出勤已录入课程过滤"]),
+        ("v3.0", "2026-05-08", ["两端版本号统一为 3.0", "出勤列表底部留白防FAB遮挡", "自定义出勤按名称去重"]),
         ("v1.5.3", "2026-05-08", ["标题固定不随内容滚动", "设置页新增更新日志入口"]),
         ("v1.5.2", "2026-05-08", ["工资页新增炎梦分组（蓝色），排在超能星球下方"]),
         ("v1.5.1", "2026-05-08", ["自定义出勤支持修改上课时间（如 14:00-15:00），留空使用原课时间", "出勤列表自定义记录显示橙色时间标签"]),
