@@ -24,8 +24,8 @@ jobs:
           <key>CFBundleIdentifier</key><string>com.ayng.kebiao</string>
           <key>CFBundleName</key><string>课表</string>
           <key>CFBundleDisplayName</key><string>课表</string>
-          <key>CFBundleVersion</key><string>31</string>
-          <key>CFBundleShortVersionString</key><string>3.0.1</string>
+          <key>CFBundleVersion</key><string>32</string>
+          <key>CFBundleShortVersionString</key><string>3.0.2</string>
           <key>CFBundlePackageType</key><string>APPL</string>
           <key>LSRequiresIPhoneOS</key><true/>
           <key>UILaunchScreen</key><dict/>
@@ -37,7 +37,7 @@ jobs:
           </dict></plist>
           PEOF
           cp ~/Kebiao ~/Payload/Kebiao.app/
-          IPA_NAME="kebiao-v3.0.1-b31.ipa"
+          IPA_NAME="kebiao-v3.0.2-b32.ipa"
           IPA_DIR="$HOME"
           cd "$IPA_DIR" && zip -r "$IPA_NAME" Payload
           ls -lh "$IPA_DIR/$IPA_NAME"

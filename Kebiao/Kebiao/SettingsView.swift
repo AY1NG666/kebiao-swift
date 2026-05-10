@@ -135,7 +135,7 @@ struct SettingsView: View {
                             Image(systemName: "doc.text").frame(width: 24)
                             Text("更新日志")
                             Spacer()
-                            Text("v3.0").font(.caption).foregroundColor(.secondary)
+                            Text("v3.0.2").font(.caption).foregroundColor(.secondary)
                             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         }
                         .padding()
@@ -344,6 +344,7 @@ struct ChangelogView: View {
     @Environment(\.dismiss) var dismiss
 
     private let versions: [(String, String, [String])] = [
+        ("v3.0.2", "2026-05-11", ["修复导出分享面板无法弹出", "导出写入失败时增加错误提示", "移除废弃 SalaryRule 代码", "提取 Color(hex:) 共享扩展"]),
         ("v3.0", "2026-05-08", ["两端版本号统一为 3.0", "出勤列表底部留白防FAB遮挡", "自定义出勤按名称去重"]),
         ("v1.5.3", "2026-05-08", ["标题固定不随内容滚动", "设置页新增更新日志入口"]),
         ("v1.5.2", "2026-05-08", ["工资页新增炎梦分组（蓝色），排在超能星球下方"]),
