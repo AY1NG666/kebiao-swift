@@ -104,6 +104,7 @@ struct AttendanceView: View {
                     }
                 }
                 .padding(.vertical)
+                .padding(.bottom, 80) // avoid FAB overlap
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("出勤记录")
