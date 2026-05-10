@@ -251,7 +251,7 @@ struct AddAttendanceView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("选择课程").font(.subheadline).foregroundColor(.secondary)
-                ForEach(store.courses) { course in
+                ForEach(uniqueCoursesByName(), id: \.name) { course in
                     Button {
                         customCourseId = course.id
                         if course.isKindergarten { customStudentCount = ""; customKinderToggled = false }
@@ -421,6 +421,11 @@ struct AddAttendanceView: View {
             }
         }
         if !newAttendances.isEmpty { onSave(newAttendances) }
+    }
+
+    private func uniqueCoursesByName() -> [Course] {
+        var seen = Set<String>()
+        return store.courses.filter { seen.insert($0.name).inserted }
     }
 
     private func saveCustom() {
