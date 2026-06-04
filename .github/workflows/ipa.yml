@@ -44,4 +44,4 @@ jobs:
           echo "ipa_dir=$IPA_DIR" >> $GITHUB_ENV
           echo "ipa_name=$IPA_NAME" >> $GITHUB_ENV
       - uses: actions/upload-artifact@v4
-        with: { name: kebiao-ipa-v3.0.1-b31, path: /Users/runner/kebiao-v*.ipa }
+        with: { name: kebiao-ipa-v3.0.2-b32, path: /Users/runner/kebiao-v*.ipa }
