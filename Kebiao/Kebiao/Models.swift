@@ -1,6 +1,28 @@
 import Foundation
 
+func parseTimeMinutes(_ text: String) -> Int? {
+    let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 2,
+          let hour = Int(parts[0]),
+          let minute = Int(parts[1]),
+          (0...23).contains(hour),
+          (0...59).contains(minute) else {
+        return nil
+    }
+    return hour * 60 + minute
+}
+
+func isValidTimeRange(start: String, end: String) -> Bool {
+    guard let startMinutes = parseTimeMinutes(start),
+          let endMinutes = parseTimeMinutes(end) else {
+        return false
+    }
+    return endMinutes > startMinutes
+}
+
 struct Course: Codable, Identifiable, Equatable {
+    static let defaultKindergartenRate = 55.0
+
     var id = UUID()
     var name: String
     var location: String
@@ -8,16 +30,61 @@ struct Course: Codable, Identifiable, Equatable {
     var startTime: String
     var endTime: String
     var isKindergarten: Bool = false
+    var kindergartenRate: Double = Course.defaultKindergartenRate
     var colorHex: String = ""
 
+    init(
+        id: UUID = UUID(),
+        name: String,
+        location: String,
+        dayOfWeek: Int,
+        startTime: String,
+        endTime: String,
+        isKindergarten: Bool = false,
+        kindergartenRate: Double = Course.defaultKindergartenRate,
+        colorHex: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.location = location
+        self.dayOfWeek = dayOfWeek
+        self.startTime = startTime
+        self.endTime = endTime
+        self.isKindergarten = isKindergarten
+        self.kindergartenRate = kindergartenRate
+        self.colorHex = colorHex
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, location, dayOfWeek, startTime, endTime
+        case isKindergarten, kindergartenRate, colorHex
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        location = try container.decode(String.self, forKey: .location)
+        dayOfWeek = try container.decode(Int.self, forKey: .dayOfWeek)
+        startTime = try container.decode(String.self, forKey: .startTime)
+        endTime = try container.decode(String.self, forKey: .endTime)
+        isKindergarten = try container.decodeIfPresent(Bool.self, forKey: .isKindergarten) ?? false
+        let decodedRate = try container.decodeIfPresent(Double.self, forKey: .kindergartenRate) ?? Course.defaultKindergartenRate
+        kindergartenRate = decodedRate.isFinite && decodedRate > 0 ? decodedRate : Course.defaultKindergartenRate
+        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex) ?? ""
+    }
+
+    var effectiveKindergartenRate: Double {
+        kindergartenRate.isFinite && kindergartenRate > 0 ? kindergartenRate : Course.defaultKindergartenRate
+    }
+
     var durationHours: Double {
-        let s = startTime.split(separator: ":").compactMap { Int($0) }
-        let e = endTime.split(separator: ":").compactMap { Int($0) }
-        guard s.count == 2, e.count == 2 else { return 1.0 }
-        let sm = s[0]*60 + s[1]
-        let em = e[0]*60 + e[1]
-        let diff = em > sm ? em - sm : em + 1440 - sm
-        return Double(diff) / 60.0
+        guard let startMinutes = parseTimeMinutes(startTime),
+              let endMinutes = parseTimeMinutes(endTime),
+              endMinutes > startMinutes else {
+            return 0.0
+        }
+        return Double(endMinutes - startMinutes) / 60.0
     }
 }
 

@@ -1,5 +1,9 @@
 import SwiftUI
 
+private func formatYuan(_ value: Double) -> String {
+    String(format: "%.2f", value)
+}
+
 // MARK: - Flexible date parsing
 func parseFlexibleDate(_ text: String) -> Date? {
     let trimmed = text.trimmingCharacters(in: .whitespaces)
@@ -10,6 +14,7 @@ func parseFlexibleDate(_ text: String) -> Date? {
 
     let df = DateFormatter()
     df.locale = Locale(identifier: "zh_CN")
+    df.isLenient = false
 
     let formats: [String] = [
         "yyyy-MM-dd", "yyyy/MM/dd", "yyyy.MM.dd",
@@ -35,12 +40,21 @@ func parseFlexibleDate(_ text: String) -> Date? {
         if parts.count == 2, let m = Int(parts[0]), let d = Int(parts[1]),
            (1...12).contains(m), (1...31).contains(d) {
             var comps = DateComponents(); comps.year = thisYear; comps.month = m; comps.day = d
-            if let date = cal.date(from: comps) { return date }
+            if let date = cal.date(from: comps),
+               cal.dateComponents([.year, .month, .day], from: date).month == m,
+               cal.dateComponents([.year, .month, .day], from: date).day == d {
+                return date
+            }
         }
         if parts.count == 3, let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]),
            (1...12).contains(m), (1...31).contains(d) {
             var comps = DateComponents(); comps.year = y; comps.month = m; comps.day = d
-            if let date = cal.date(from: comps) { return date }
+            if let date = cal.date(from: comps),
+               cal.dateComponents([.year, .month, .day], from: date).year == y,
+               cal.dateComponents([.year, .month, .day], from: date).month == m,
+               cal.dateComponents([.year, .month, .day], from: date).day == d {
+                return date
+            }
         }
     }
     return nil
@@ -160,6 +174,19 @@ struct AddAttendanceView: View {
     private var pendingCourses: [Course] { dayCourses.filter { !store.hasAttendanceFor(courseId: $0.id, date: selectedDate) } }
     private var recordedCourses: [Course] { dayCourses.filter { store.hasAttendanceFor(courseId: $0.id, date: selectedDate) } }
     private var customSelectedCourse: Course? { store.courses.first { $0.id == customCourseId } }
+    private var customTimeIsValid: Bool {
+        let fields = [customStartH, customStartM, customEndH, customEndM]
+        if fields.allSatisfy({ $0.isEmpty }) { return true }
+        guard fields.allSatisfy({ !$0.isEmpty }),
+              let startH = Int(customStartH), let startM = Int(customStartM),
+              let endH = Int(customEndH), let endM = Int(customEndM) else {
+            return false
+        }
+        return isValidTimeRange(
+            start: String(format: "%02d:%02d", startH, startM),
+            end: String(format: "%02d:%02d", endH, endM)
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -192,7 +219,7 @@ struct AddAttendanceView: View {
                         else { saveCustom() }
                     }
                     .disabled(mode == 0 ? (!hasTodayCourses || !hasAnyScheduleEntry())
-                              : customCourseId == nil || (customSelectedCourse?.isKindergarten == false && customStudentCount.isEmpty) || (customSelectedCourse?.isKindergarten == true && !customKinderToggled))
+                              : customCourseId == nil || !customTimeIsValid || (customSelectedCourse?.isKindergarten == false && !((Int(customStudentCount) ?? 0) > 0)) || (customSelectedCourse?.isKindergarten == true && !customKinderToggled))
                 }
             }
         }
@@ -284,7 +311,7 @@ struct AddAttendanceView: View {
                         Text("\(course.startTime)-\(course.endTime)").font(.caption).foregroundColor(.secondary)
                     }
                     if course.isKindergarten {
-                        Toggle("到课（¥55/节）", isOn: $customKinderToggled).tint(.green)
+                        Toggle("到课（¥\(formatYuan(course.effectiveKindergartenRate))/节）", isOn: $customKinderToggled).tint(.green)
                     } else {
                         HStack(spacing: 16) {
                             HStack(spacing: 6) {
@@ -347,7 +374,7 @@ struct AddAttendanceView: View {
                 RoundedRectangle(cornerRadius: 2).fill(course.isKindergarten ? Color.green : Color.orange).frame(width: 4, height: 20)
                 Text(course.name).font(.subheadline).fontWeight(.semibold)
                 Spacer()
-                if course.isKindergarten { Text("¥55").font(.caption).foregroundColor(.green).fontWeight(.medium) }
+                if course.isKindergarten { Text("¥\(formatYuan(course.effectiveKindergartenRate))").font(.caption).foregroundColor(.green).fontWeight(.medium) }
             }
             if course.isKindergarten {
                 Toggle("到课", isOn: Binding(
@@ -398,7 +425,7 @@ struct AddAttendanceView: View {
             if course.isKindergarten {
                 if entries[course.id]?.enabled == true { return true }
             } else {
-                if let e = entries[course.id], !e.studentCount.isEmpty || (Int(e.assistantCount) ?? 0) > 0 { return true }
+                if let e = entries[course.id], (Int(e.studentCount) ?? 0) > 0 { return true }
             }
         }
         return false
@@ -415,7 +442,7 @@ struct AddAttendanceView: View {
                 let e = entries[course.id]
                 let sc = Int(e?.studentCount ?? "") ?? 0
                 let ac = Int(e?.assistantCount ?? "0") ?? 0
-                if sc > 0 || ac > 0 {
+                if sc > 0 {
                     newAttendances.append(Attendance(courseId: course.id, date: selectedDate, studentCount: sc, assistantCount: ac))
                 }
             }
@@ -432,18 +459,19 @@ struct AddAttendanceView: View {
         guard let cid = customCourseId else { return }
         let course = store.courses.first { $0.id == cid }
         if course?.isKindergarten == true && !customKinderToggled { return }
-        let sc = course?.isKindergarten == true ? 0 : (Int(customStudentCount) ?? 0)
-        let ac = course?.isKindergarten == true ? 0 : (Int(customAssistantCount) ?? 0)
+        guard customTimeIsValid else { return }
+        let sc = course?.isKindergarten == true ? 0 : max(0, Int(customStudentCount) ?? 0)
+        let ac = course?.isKindergarten == true ? 0 : max(0, Int(customAssistantCount) ?? 0)
         // Build custom time note
         var note: String? = nil
         if !customStartH.isEmpty || !customStartM.isEmpty || !customEndH.isEmpty || !customEndM.isEmpty {
-            let sh = customStartH.isEmpty ? "00" : customStartH.padding(toLength: 2, withPad: "0", startingAt: 0)
-            let sm = customStartM.isEmpty ? "00" : customStartM.padding(toLength: 2, withPad: "0", startingAt: 0)
-            let eh = customEndH.isEmpty ? "00" : customEndH.padding(toLength: 2, withPad: "0", startingAt: 0)
-            let em = customEndM.isEmpty ? "00" : customEndM.padding(toLength: 2, withPad: "0", startingAt: 0)
+            let sh = String(format: "%02d", Int(customStartH) ?? 0)
+            let sm = String(format: "%02d", Int(customStartM) ?? 0)
+            let eh = String(format: "%02d", Int(customEndH) ?? 0)
+            let em = String(format: "%02d", Int(customEndM) ?? 0)
             note = "\(sh):\(sm)-\(eh):\(em)"
         }
-        if sc > 0 || ac > 0 || customKinderToggled {
+        if sc > 0 || customKinderToggled {
             onSave([Attendance(courseId: cid, date: selectedDate, studentCount: sc, assistantCount: ac, note: note)])
         }
     }
@@ -458,6 +486,9 @@ struct EditAttendanceView: View {
     @State private var studentCount = ""
     @State private var assistantCount = ""
     private var isKinder: Bool { store.isKinderCourse(attendance.courseId) }
+    private var kindergartenRate: Double {
+        store.courses.first(where: { $0.id == attendance.courseId })?.effectiveKindergartenRate ?? Course.defaultKindergartenRate
+    }
 
     var body: some View {
         NavigationStack {
@@ -472,7 +503,7 @@ struct EditAttendanceView: View {
                         TextField("助教人数", text: $assistantCount).keyboardType(.numberPad)
                     }
                 } else {
-                    Section { Text("幼儿园 ¥55/节").foregroundColor(.green) }
+                    Section { Text("幼儿园 ¥\(formatYuan(kindergartenRate))/节").foregroundColor(.green) }
                 }
             }
             .onAppear { studentCount = String(attendance.studentCount); assistantCount = String(attendance.assistantCount) }
@@ -487,8 +518,8 @@ struct EditAttendanceView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         var a = attendance
-                        a.studentCount = Int(studentCount) ?? 0
-                        a.assistantCount = Int(assistantCount) ?? 0
+                        a.studentCount = max(0, Int(studentCount) ?? 0)
+                        a.assistantCount = max(0, Int(assistantCount) ?? 0)
                         onSave(a)
                     }
                 }

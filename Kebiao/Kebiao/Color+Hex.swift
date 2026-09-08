@@ -1,6 +1,13 @@
 import SwiftUI
 
 extension Color {
+    static func isValidHex(_ value: String) -> Bool {
+        let hex = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard hex.hasPrefix("#") else { return false }
+        let digits = String(hex.dropFirst())
+        return digits.count == 6 && digits.allSatisfy { "0123456789abcdefABCDEF".contains($0) }
+    }
+
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0

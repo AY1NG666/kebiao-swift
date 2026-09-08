@@ -58,6 +58,10 @@ struct SettingsView: View {
                                 Text(course.name).font(.subheadline).fontWeight(.medium)
                                 Text("\(course.location)  周\(["","一","二","三","四","五","六","日"][course.dayOfWeek]) \(course.startTime)-\(course.endTime)")
                                     .font(.caption).foregroundColor(.secondary)
+                                if course.isKindergarten {
+                                    Text("幼儿园 ¥\(String(format: "%.2f", course.effectiveKindergartenRate))/节")
+                                        .font(.caption2).foregroundColor(.green)
+                                }
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
@@ -135,7 +139,7 @@ struct SettingsView: View {
                             Image(systemName: "doc.text").frame(width: 24)
                             Text("更新日志")
                             Spacer()
-                            Text("v3.0.2").font(.caption).foregroundColor(.secondary)
+                            Text("v3.1.2").font(.caption).foregroundColor(.secondary)
                             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         }
                         .padding()
@@ -179,20 +183,42 @@ struct SettingsView: View {
 
     // MARK: - Export
     private func exportAll() {
-        var csv = "--- 课程表 ---\n课程名称,上课地点,星期,开始时间,结束时间,时长(小时),幼儿园,颜色\n"
+        var csv = "--- 课程表 ---\n课程名称,上课地点,星期,开始时间,结束时间,课时,幼儿园,颜色,幼儿园金额\n"
         for c in store.courses {
-            csv += "\(c.name),\(c.location),\(c.dayOfWeek),\(c.startTime),\(c.endTime),\(c.durationHours),\(c.isKindergarten ? "是" : "否"),\(c.colorHex)\n"
+            csv += csvRow([
+                c.name,
+                c.location,
+                String(c.dayOfWeek),
+                c.startTime,
+                c.endTime,
+                String(c.durationHours),
+                c.isKindergarten ? "是" : "否",
+                c.colorHex,
+                c.isKindergarten ? String(format: "%.2f", c.effectiveKindergartenRate) : ""
+            ]) + "\n"
         }
-        csv += "\n--- 出勤记录 ---\n日期,课程名称,上课地点,学生,助教,课时费,类型\n"
+        csv += "\n--- 出勤记录 ---\n日期,课程名称,上课地点,学生,助教,课时费,类型,备注\n"
         var total = 0.0
         for a in store.attendances.sorted(by: { $0.date < $1.date }) {
             let c = store.courses.first { $0.id == a.courseId }
-            let rate = c?.isKindergarten == true ? 55.0 : Double(a.studentCount)*7 + Double(a.assistantCount)*3
+            let rate = c?.isKindergarten == true ? (c?.effectiveKindergartenRate ?? Course.defaultKindergartenRate) : Double(a.studentCount)*7 + Double(a.assistantCount)*3
             total += rate
             let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-            csv += "\(df.string(from: a.date)),\(c?.name ?? "?"),\(c?.location ?? "?"),\(a.studentCount),\(a.assistantCount),\(rate),\(c?.isKindergarten == true ? "幼儿园" : "超能星球")\n"
+            csv += csvRow([
+                df.string(from: a.date),
+                c?.name ?? "?",
+                c?.location ?? "?",
+                String(a.studentCount),
+                String(a.assistantCount),
+                String(rate),
+                c?.isKindergarten == true ? "幼儿园" : "超能星球",
+                a.note ?? ""
+            ]) + "\n"
         }
-        csv += "\n--- 汇总 ---\n总课程数,\(store.courses.count)\n总出勤记录,\(store.attendances.count)\n总课时费,\(total)"
+        csv += "\n--- 汇总 ---\n"
+        csv += csvRow(["总课程数", String(store.courses.count)]) + "\n"
+        csv += csvRow(["总出勤记录", String(store.attendances.count)]) + "\n"
+        csv += csvRow(["总课时费", String(total)])
 
         let df = DateFormatter(); df.dateFormat = "yyyyMMdd"
         let tempDir = FileManager.default.temporaryDirectory
@@ -256,10 +282,13 @@ struct SettingsView: View {
         var courseMap: [String: UUID] = [:]
         for c in store.courses { courseMap[c.name] = c.id }
 
-        let lines = content.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        let lines = content.components(separatedBy: .newlines)
 
-        for line in lines {
+        for rawLine in lines {
             lineNum += 1
+            let line = rawLine
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\u{FEFF}", with: "")
             if line.isEmpty { continue }
             if line.hasPrefix("---") {
                 section = line.replacingOccurrences(of: "-", with: "").trimmingCharacters(in: .whitespaces)
@@ -268,29 +297,53 @@ struct SettingsView: View {
             }
             if skipNext { skipNext = false; continue }
 
-            let cols = parseCSVLine(line)
+            let cols = parseCSVLine(rawLine)
 
             if section.contains("课程表") {
                 guard cols.count >= 6 else { errors.append("第\(lineNum)行: 列数不够"); continue }
                 let dayStr = cols[2].trimmingCharacters(in: .whitespaces)
-                guard let day = Int(dayStr), (1...7).contains(day) else { errors.append("第\(lineNum)行: 无效星期 '\(dayStr)'"); continue }
+                guard let day = parseDayOfWeek(dayStr) else { errors.append("第\(lineNum)行: 无效星期 '\(dayStr)'"); continue }
                 let name = cols[0]; let location = cols[1]
                 let start = cols[3]; let end = cols[4]
-                let isKinder = cols.count > 5 && (cols[5].hasPrefix("是") || cols[5].hasPrefix("1") || cols[5].lowercased().hasPrefix("y"))
-                let color = cols.count > 7 ? cols[7] : ""
-                let c = Course(name: name, location: location, dayOfWeek: day, startTime: start, endTime: end, isKindergarten: isKinder, colorHex: color)
+                guard isValidTimeRange(start: start, end: end) else {
+                    errors.append("第\(lineNum)行: 无效时间范围")
+                    continue
+                }
+                let isKinder = cols.count > 6 && (cols[6].hasPrefix("是") || cols[6].hasPrefix("1") || cols[6] == "幼儿园" || cols[6].lowercased().hasPrefix("y") || cols[6].lowercased() == "true")
+                let color = cols.count > 7 && Color.isValidHex(cols[7]) ? cols[7] : ""
+                if cols.count > 7 && !cols[7].isEmpty && color.isEmpty {
+                    errors.append("第\(lineNum)行: 无效颜色，已使用默认颜色")
+                }
+                let rateText = cols.count > 8 ? cols[8].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                let rate: Double
+                if rateText.isEmpty {
+                    rate = Course.defaultKindergartenRate
+                } else if let parsedRate = Double(rateText), parsedRate.isFinite, parsedRate > 0 {
+                    rate = parsedRate
+                } else {
+                    errors.append("第\(lineNum)行: 幼儿园金额无效，已使用默认金额")
+                    rate = Course.defaultKindergartenRate
+                }
+                var c = Course(name: name, location: location, dayOfWeek: day, startTime: start, endTime: end, isKindergarten: isKinder, kindergartenRate: rate, colorHex: color)
+                if let existing = store.courses.first(where: { $0.name == name }) {
+                    c.id = existing.id
+                }
                 importCourses.append(c)
                 courseMap[name] = c.id
             } else if section.contains("出勤记录") {
                 guard cols.count >= 2 else { errors.append("第\(lineNum)行: 列数不够"); continue }
                 let dateStr = cols[0]; let courseName = cols[1]
-                let studentCount = Int(cols.count > 3 ? cols[3] : "0") ?? 0
-                let assistantCount = Int(cols.count > 4 ? cols[4] : "0") ?? 0
+                guard let studentCount = Int(cols.count > 3 ? cols[3] : "0"), studentCount >= 0,
+                      let assistantCount = Int(cols.count > 4 ? cols[4] : "0"), assistantCount >= 0 else {
+                    errors.append("第\(lineNum)行: 人数无效")
+                    continue
+                }
 
                 guard let date = parseFlexibleDate(dateStr) else { errors.append("第\(lineNum)行: 无效日期 '\(dateStr)'"); continue }
                 guard let courseId = courseMap[courseName] else { errors.append("第\(lineNum)行: 找不到课程 '\(courseName)'"); continue }
                 let startOfDay = Calendar.current.startOfDay(for: date)
-                importAttendances.append(Attendance(courseId: courseId, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount))
+                let note = cols.count > 7 && !cols[7].isEmpty ? cols[7] : nil
+                importAttendances.append(Attendance(courseId: courseId, date: startOfDay, studentCount: studentCount, assistantCount: assistantCount, note: note))
             }
         }
 
@@ -308,7 +361,7 @@ struct SettingsView: View {
         if !importAttendances.isEmpty {
             for a in importAttendances {
                 if !store.hasAttendanceFor(courseId: a.courseId, date: a.date) {
-                    store.attendances.append(a)
+                    store.addAttendance(a)
                     added += 1
                 } else {
                     errors.append("跳过重复: \(courseMap.first(where:{$0.value==a.courseId})?.key ?? "?") \(a.date)")
@@ -324,17 +377,54 @@ struct SettingsView: View {
         var result: [String] = []
         var current = ""
         var inQuotes = false
-        for ch in line {
-            if ch == "\"" { inQuotes.toggle(); continue }
-            if ch == "," && !inQuotes { result.append(current.trimmingCharacters(in: .whitespaces)); current = ""; continue }
-            current.append(ch)
+        var index = line.startIndex
+        while index < line.endIndex {
+            let ch = line[index]
+            if ch == "\"" {
+                let next = line.index(after: index)
+                if inQuotes && next < line.endIndex && line[next] == "\"" {
+                    current.append("\"")
+                    index = next
+                } else {
+                    inQuotes.toggle()
+                }
+            } else if ch == "," && !inQuotes {
+                result.append(current.trimmingCharacters(in: .whitespaces))
+                current = ""
+            } else {
+                current.append(ch)
+            }
+            index = line.index(after: index)
         }
         result.append(current.trimmingCharacters(in: .whitespaces))
         return result
     }
 
+    private func csvRow(_ fields: [String]) -> String {
+        fields.map { field in
+            let escaped = field.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escaped)\""
+        }.joined(separator: ",")
+    }
+
+    private func parseDayOfWeek(_ value: String) -> Int? {
+        if let day = Int(value), (1...7).contains(day) {
+            return day
+        }
+        switch value {
+        case "周一", "星期一": return 1
+        case "周二", "星期二": return 2
+        case "周三", "星期三": return 3
+        case "周四", "星期四": return 4
+        case "周五", "星期五": return 5
+        case "周六", "星期六": return 6
+        case "周日", "星期日", "星期天": return 7
+        default: return nil
+        }
+    }
+
     private func courseColor(_ c: Course) -> Color {
-        if !c.colorHex.isEmpty { return Color(hex: c.colorHex) }
+        if Color.isValidHex(c.colorHex) { return Color(hex: c.colorHex) }
         return c.isKindergarten ? .green : .orange
     }
 }
@@ -344,6 +434,7 @@ struct ChangelogView: View {
     @Environment(\.dismiss) var dismiss
 
     private let versions: [(String, String, [String])] = [
+        ("v3.1.2", "2026-09-08", ["上课地点支持自定义输入", "幼儿园课程支持逐门设置每节金额", "同步 CSV 金额字段并兼容旧数据"]),
         ("v3.0.2", "2026-05-11", ["修复导出分享面板无法弹出", "导出写入失败时增加错误提示", "移除废弃 SalaryRule 代码", "提取 Color(hex:) 共享扩展"]),
         ("v3.0", "2026-05-08", ["两端版本号统一为 3.0", "出勤列表底部留白防FAB遮挡", "自定义出勤按名称去重"]),
         ("v1.5.3", "2026-05-08", ["标题固定不随内容滚动", "设置页新增更新日志入口"]),

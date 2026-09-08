@@ -1,32 +1,57 @@
 import SwiftUI
 
+private func formatKindergartenRate(_ value: Double) -> String {
+    String(format: "%.2f", value)
+}
+
+private func sanitizedRateInput(_ value: String) -> String {
+    let allowed = value.filter { $0.isNumber || $0 == "." }
+    let parts = allowed.split(separator: ".", omittingEmptySubsequences: false)
+    guard parts.count > 1 else { return allowed }
+    return String(parts[0]) + "." + String(parts[1].prefix(2))
+}
+
 struct CourseFormView: View {
     var course: Course? = nil
     var onSave: (Course) -> Void
     @Environment(\.dismiss) var dismiss
 
     @State private var name = ""
-    @State private var location = "欧阳修"
+    @State private var location = ""
     @State private var day = 1
     @State private var startH = ""
     @State private var startM = ""
     @State private var endH = ""
     @State private var endM = ""
     @State private var isKinder = false
+    @State private var kindergartenRateText = formatKindergartenRate(Course.defaultKindergartenRate)
     @State private var colorHex = ""
 
     private let dayAbbrs = ["一","二","三","四","五","六","日"]
 
     private var durationText: String {
-        let sH = Int(startH) ?? 0; let sM = Int(startM) ?? 0
-        let eH = Int(endH) ?? 0; let eM = Int(endM) ?? 0
-        let sm = sH * 60 + sM
-        let em = eH * 60 + eM
-        let diff = em > sm ? em - sm : em + 1440 - sm
-        let hours = Double(diff) / 60.0
-        if hours == 0 { return "—" }
+        guard let sH = Int(startH), let sM = Int(startM),
+              let eH = Int(endH), let eM = Int(endM),
+              (0...23).contains(sH), (0...59).contains(sM),
+              (0...23).contains(eH), (0...59).contains(eM),
+              eH * 60 + eM > sH * 60 + sM else {
+            return "--"
+        }
+        let hours = Double(eH * 60 + eM - sH * 60 - sM) / 60.0
         if hours == floor(hours) { return "\(Int(hours))小时" }
         return String(format: "%.1f小时", hours)
+    }
+
+    private var validTimeInput: Bool {
+        guard !startH.isEmpty, !startM.isEmpty, !endH.isEmpty, !endM.isEmpty,
+              let sH = Int(startH), let sM = Int(startM),
+              let eH = Int(endH), let eM = Int(endM) else {
+            return false
+        }
+        return isValidTimeRange(
+            start: String(format: "%02d:%02d", sH, sM),
+            end: String(format: "%02d:%02d", eH, eM)
+        )
     }
 
     init(course: Course? = nil, onSave: @escaping (Course) -> Void) {
@@ -43,6 +68,7 @@ struct CourseFormView: View {
             _endH = State(initialValue: e.count>0 ? String(e[0]) : "")
             _endM = State(initialValue: e.count>1 ? String(e[1]) : "")
             _isKinder = State(initialValue: c.isKindergarten)
+            _kindergartenRateText = State(initialValue: formatKindergartenRate(c.effectiveKindergartenRate))
             _colorHex = State(initialValue: c.colorHex)
         }
     }
@@ -54,23 +80,8 @@ struct CourseFormView: View {
                     TextField("课程名称", text: $name)
                 }
 
-                // Location chips
                 Section("上课地点") {
-                    HStack(spacing: 8) {
-                        ForEach(locationOptions, id: \.self) { loc in
-                            Button {
-                                location = loc
-                            } label: {
-                                Text(loc)
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 16).padding(.vertical, 8)
-                                    .background(location == loc ? Color.indigo : Color(.systemGray5))
-                                    .foregroundColor(location == loc ? .white : .primary)
-                                    .cornerRadius(20)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    TextField("例如：欧阳修、木马森林或自定义地点", text: $location)
                 }
 
                 // Day of week chips
@@ -118,7 +129,23 @@ struct CourseFormView: View {
                     }
                 }
 
-                Toggle("幼儿园课程（固定55元/节）", isOn: $isKinder)
+                Toggle("幼儿园课程", isOn: $isKinder)
+
+                if isKinder {
+                    Section("幼儿园课时费") {
+                        TextField("每节金额（元）", text: $kindergartenRateText)
+                            .keyboardType(.decimalPad)
+                            .onChange(of: kindergartenRateText) {
+                                let sanitized = sanitizedRateInput($0)
+                                if sanitized != kindergartenRateText { kindergartenRateText = sanitized }
+                            }
+                        if kindergartenRateValue == nil {
+                            Text("请输入大于 0 的有效金额")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
 
                 // Color picker grid
                 Section("卡片颜色") {
@@ -137,17 +164,27 @@ struct CourseFormView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        let sh = min(Int(startH) ?? 0, 23); let sm = min(Int(startM) ?? 0, 59)
-                        let eh = min(Int(endH) ?? 0, 23); let em = min(Int(endM) ?? 0, 59)
+                        guard let sh = Int(startH), let sm = Int(startM),
+                              let eh = Int(endH), let em = Int(endM),
+                              validTimeInput,
+                              let rate = kindergartenRateValue else { return }
                         let start = String(format: "%02d:%02d", sh, sm)
                         let end = String(format: "%02d:%02d", eh, em)
                         var c = course ?? Course(name: "", location: "", dayOfWeek: 1, startTime: "09:00", endTime: "10:30")
                         c.name = name; c.location = location; c.dayOfWeek = day
-                        c.startTime = start; c.endTime = end; c.isKindergarten = isKinder; c.colorHex = colorHex
+                        c.startTime = start; c.endTime = end; c.isKindergarten = isKinder
+                        c.kindergartenRate = rate; c.colorHex = colorHex
                         onSave(c)
-                    }.disabled(name.isEmpty || startH.isEmpty || startM.isEmpty || endH.isEmpty || endM.isEmpty)
+                    }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !validTimeInput || kindergartenRateValue == nil)
                 }
             }
         }
+    }
+
+    private var kindergartenRateValue: Double? {
+        guard let value = Double(kindergartenRateText), value.isFinite, value > 0 else {
+            return isKinder ? nil : Course.defaultKindergartenRate
+        }
+        return value
     }
 }
